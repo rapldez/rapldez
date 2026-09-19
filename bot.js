@@ -35,14 +35,14 @@ const TERMINAL_LOG_CHANNEL = '1550789490518528010';
 const STATUS_CHANNEL_ID = '1550797478021038161';
 const FULL_LOGS_CHANNEL_ID = '1550791675486408754';
 
-// --- FUNKCJE POMOCNICZE (LOGI TERMINALA #024442) ---
-async function logToTerminalDiscord(title, description) {
+// --- FUNKCJE POMOCNICZE (LOGI TERMINALA) ---
+async function logToTerminalDiscord(title, description, color = '#024442') {
     try {
         const channel = client.channels.cache.get(TERMINAL_LOG_CHANNEL);
         if (!channel) return;
         
         const embed = new EmbedBuilder()
-            .setColor('#024442')
+            .setColor(color)
             .setAuthor({ name: '💻 TERMINAL WWW • LOGI SYSTEMOWE' })
             .setTitle(title)
             .setDescription(description)
@@ -55,7 +55,6 @@ async function logToTerminalDiscord(title, description) {
     }
 }
 
-// Sprawdzanie VPN (darmowe API)
 async function isVPN(ip) {
     if (ip === '127.0.0.1' || ip === '::1' || !ip) return false;
     try {
@@ -124,10 +123,9 @@ app.get('/auth/discord/callback', async (req, res) => {
 
     if (!code) return res.redirect('/?error=no_code');
     
-    // Sprawdzenie VPN przed zalogowaniem
     const vpnDetected = await isVPN(userIP);
     if (vpnDetected) {
-        logToTerminalDiscord('🛡️ Odrzucono ruch (VPN/Proxy)', `System zablokował próbę logowania z ukrytego adresu IP.\n**Adres IP:** \`${userIP}\``);
+        logToTerminalDiscord('🛡️ Odrzucono ruch (VPN/Proxy)', `System zablokował próbę logowania z ukrytego adresu IP.\n**Adres IP:** \`${userIP}\``, '#ed4245');
         return res.redirect('/?error=vpn_blocked');
     }
 
@@ -146,10 +144,10 @@ app.get('/auth/discord/callback', async (req, res) => {
 
         if (userData.id === YOUR_DISCORD_ID) {
             req.session.user = { id: userData.id, username: userData.username };
-            logToTerminalDiscord('🔑 Autoryzacja udana', `Panel Administratora został pomyślnie odblokowany przez **${userData.username}**.\n**IP:** \`${userIP}\``);
+            logToTerminalDiscord('🔑 Autoryzacja udana', `Panel Administratora został pomyślnie odblokowany przez **${userData.username}**.\n**IP:** \`${userIP}\``, '#024442');
             return res.redirect('/?login=success');
         } else {
-            logToTerminalDiscord('⚠️ Zablokowano dostęp', `Nieudana próba wejścia do terminala.\n**Profil:** \`${userData.username}\` (${userData.id})\n**IP:** \`${userIP}\``);
+            logToTerminalDiscord('⚠️ Zablokowano dostęp', `Nieudana próba wejścia do terminala.\n**Profil:** \`${userData.username}\` (${userData.id})\n**IP:** \`${userIP}\``, '#ed4245');
             return res.redirect('/?error=unauthorized');
         }
     } catch (error) { res.redirect('/?error=server_error'); }
@@ -162,7 +160,7 @@ app.post('/api/terminal', async (req, res) => {
         return res.status(403).json({ output: 'Odmowa dostępu.' });
     }
 
-    logToTerminalDiscord('⌨️ Wykonano polecenie', `**Komenda:** \`${cmd || '[Puste]'}\``);
+    logToTerminalDiscord('⌨️ Wykonano polecenie', `**Komenda:** \`${cmd || '[Puste]'}\``, '#024442');
     const cmdArgs = cmd.split(' ');
     const cmdLower = cmdArgs[0].toLowerCase();
 
@@ -203,6 +201,54 @@ app.get('/p/:id', async (req, res) => {
 // --- KOMENDY DISCORD ---
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
+
+    // KOMENDA TESTOWA DO EMBEDÓW
+    if (message.content === '!test-embeds' && message.author.id === YOUR_DISCORD_ID) {
+        const testEmbed1 = new EmbedBuilder()
+            .setColor('#024442')
+            .setAuthor({ name: '💻 TERMINAL WWW • LOGI SYSTEMOWE' })
+            .setTitle('🔑 Autoryzacja udana (TEST)')
+            .setDescription(`Panel Administratora został pomyślnie odblokowany przez **${message.author.username}**.\n**IP:** \`192.168.1.1\``)
+            .setTimestamp()
+            .setFooter({ text: 'rapldez.onrender.com • Zabezpieczenia' });
+
+        const testEmbed2 = new EmbedBuilder()
+            .setColor('#ed4245')
+            .setAuthor({ name: '💻 TERMINAL WWW • LOGI SYSTEMOWE' })
+            .setTitle('⚠️ Zablokowano dostęp (TEST)')
+            .setDescription(`Nieudana próba wejścia do terminala.\n**Profil:** \`hacker_bot\` (987654321098765432)\n**IP:** \`185.22.45.11\``)
+            .setTimestamp()
+            .setFooter({ text: 'rapldez.onrender.com • Zabezpieczenia' });
+
+        const testEmbed3 = new EmbedBuilder()
+            .setColor('#024442')
+            .setAuthor({ name: '📁 ARCHIWUM ZGŁOSZENIA (TEST)' })
+            .setDescription(
+                `>>> **• Kanał:** \`ticket-testowy\`\n` +
+                `**• Wiadomości:** \`15\`\n` +
+                `**• Uczestnicy:** \`${message.author.username}, Użytkownik123\`\n` +
+                `**• Otwarcie:** \`19.09.2026, 12:00:00\`\n` +
+                `**• Zamknięcie:** \`19.09.2026, 12:45:00\`\n` +
+                `**• Archiwizacja:** \`19.09.2026, 12:45:05\`\n` +
+                `**• Zarchiwizował:** <@${message.author.id}>`
+            )
+            .setFooter({ text: 'rapldez.onrender.com • Baza Danych MongoDB' })
+            .setTimestamp();
+
+        const testEmbed4 = new EmbedBuilder()
+            .setColor('#ed4245')
+            .setAuthor({ name: '🗑️ Wiadomość usunięta (TEST)' })
+            .setDescription(`**Autor:** ${message.author} (${message.author.id})\n**Kanał:** ${message.channel}\n\n**Treść:**\n\`\`\`text\nTo jest testowa treść skasowanej wiadomości.\n\`\`\``)
+            .setTimestamp();
+
+        const testEmbed5 = new EmbedBuilder()
+            .setColor('#23a559')
+            .setDescription(`🔊 **${message.author.tag}** dołączył do kanału <#${message.channel.id}> (TEST)`)
+            .setTimestamp();
+
+        await message.channel.send({ content: 'Oto podgląd Twoich logów i embedów:', embeds: [testEmbed1, testEmbed2, testEmbed3, testEmbed4, testEmbed5] });
+        return;
+    }
 
     if (message.content.startsWith('!clear') && message.author.id === YOUR_DISCORD_ID) {
         const args = message.content.split(' ');
