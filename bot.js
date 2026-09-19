@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilde
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs'); 
+const mongoose = require('mongoose');
 const app = express();
 
 app.use(cors());
@@ -10,14 +10,29 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
+const MONGO_URI = process.env.MONGO_URI; 
 const SERVER_ID = '1516145205215232050'; 
 const CATEGORY_ID = '1550704110691422318'; 
 const YOUR_DISCORD_ID = '920029957739139083';
-const COUNTER_FILE = path.join(__dirname, 'licznik.txt');
 
-if (!fs.existsSync(COUNTER_FILE)) {
-    fs.writeFileSync(COUNTER_FILE, '0');
+// TUTAJ WKLEJ ID KANAŁU, NA KTÓRY MAJĄ LECIEĆ ZARCHIWIZOWANE TICKETY
+const LOG_CHANNEL_ID = 'TUTAJ_WPISZ_ID_KANALU'; 
+
+// ---------------- MONGODB ----------------
+const counterSchema = new mongoose.Schema({
+    id: { type: String, default: 'views' },
+    count: { type: Number, default: 0 }
+});
+const Counter = mongoose.model('Counter', counterSchema);
+
+if (MONGO_URI) {
+    mongoose.connect(MONGO_URI)
+        .then(() => console.log('✅ Połączono z bazą MongoDB!'))
+        .catch(err => console.error('❌ Błąd połączenia z MongoDB:', err));
+} else {
+    console.log('⚠️ Brak MONGO_URI! Licznik nie będzie działał.');
 }
+// -----------------------------------------
 
 const client = new Client({ 
     intents: [
@@ -28,14 +43,21 @@ const client = new Client({
     ] 
 });
 
-app.get('/api/views', (req, res) => {
+app.get('/api/views', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     try {
-        let views = parseInt(fs.readFileSync(COUNTER_FILE, 'utf-8')) || 0;
-        views++;
-        fs.writeFileSync(COUNTER_FILE, views.toString());
-        res.json({ views });
+        if (!MONGO_URI) return res.json({ views: 'Brak Bazy' });
+        
+        let counter = await Counter.findOne({ id: 'views' });
+        if (!counter) {
+            counter = new Counter({ id: 'views', count: 0 });
+        }
+        counter.count += 1;
+        await counter.save();
+        
+        res.json({ views: counter.count });
     } catch (err) {
+        console.error("Błąd licznika:", err);
         res.status(500).json({ views: 'Live' });
     }
 });
@@ -49,11 +71,8 @@ app.post('/api/kontakt', async (req, res) => {
 
     try {
         const guild = client.guilds.cache.get(SERVER_ID);
-        if (!guild) {
-            return res.status(500).json({ message: 'Błąd: Bot nie widzi serwera.' });
-        }
+        if (!guild) return res.status(500).json({ message: 'Błąd: Bot nie widzi serwera.' });
 
-        // Miękkie szukanie użytkownika
         const inputClean = nick.toLowerCase().trim();
         let member = null;
 
@@ -77,27 +96,17 @@ app.post('/api/kontakt', async (req, res) => {
             console.log("Błąd szukania użytkownika:", e);
         }
 
-        // Uprawnienia: domyślnie nikt nie widzi kanału (poza administracją serwera)
         const permissionOverwrites = [
-            {
-                id: guild.id,
-                deny: [PermissionsBitField.Flags.ViewChannel],
-            }
+            { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }
         ];
 
-        // Jeśli bot go znalazł, dostaje uprawnienia (żeby pisać z Tobą w tickecie)
         if (member) {
             permissionOverwrites.push({
                 id: member.id,
-                allow: [
-                    PermissionsBitField.Flags.ViewChannel, 
-                    PermissionsBitField.Flags.SendMessages, 
-                    PermissionsBitField.Flags.ReadMessageHistory
-                ],
+                allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory],
             });
         }
 
-        // Bezpieczna nazwa kanału i zapisanie ID w temacie (topic) do użycia w przyciskach
         const safeNick = nick.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 16) || 'nieznany';
         const channelName = `ticket-${safeNick}`;
         const topicId = member ? member.id : 'brak_id';
@@ -106,11 +115,11 @@ app.post('/api/kontakt', async (req, res) => {
             name: channelName,
             type: ChannelType.GuildText,
             parent: CATEGORY_ID,
-            topic: topicId, // Ukryte zapamiętanie ID
+            topic: topicId,
             permissionOverwrites: permissionOverwrites
         });
 
-        const pingText = member ? `<@${member.id}>` : 'Brak na serwerze (Nie można oznaczyć)';
+        const pingText = member ? `<@${member.id}>` : 'Brak na serwerze';
         const dateStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
 
         const embed = new EmbedBuilder()
@@ -123,45 +132,40 @@ app.post('/api/kontakt', async (req, res) => {
 
 **• 📩 × Informacje o zgłoszeniu:**
 \`—\` **× Temat:** \`${subject}\`
-\`—\` **× Data i godzina:** \`${dateStr}\`
+\`—\` **× Data wysłania:** \`${dateStr}\`
 \`—\` **× Treść:**
 \`\`\`text\n${message}\n\`\`\`
             `)
             .setFooter({ text: 'rapldez OS • System zgłoszeń' });
 
-        // Komplet przycisków startowych
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj').setStyle(ButtonStyle.Danger).setEmoji('📁')
         );
 
-        // Ping na głównego admina + ładny embed
         await newChannel.send({ 
             content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie!`, 
             embeds: [embed],
             components: [row]
         });
         
-        res.status(200).json({ message: 'Zgłoszenie wysłane! Jeśli jesteś na moim serwerze Discord, dostałeś powiadomienie.' });
+        res.status(200).json({ message: 'Zgłoszenie wysłane! Sprawdź Discorda.' });
 
     } catch (error) {
         console.error("Błąd przy tworzeniu ticketa:", error);
-        res.status(500).json({ message: 'Wystąpił błąd podczas komunikacji z Discordem.' });
+        res.status(500).json({ message: 'Wystąpił błąd podczas komunikacji z serwerem.' });
     }
 });
 
-// LOGIKA PRZYCISKÓW W TICKETACH
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
-    // Uprawnienia - tylko Ty (lub admini) mogą klikać przyciski
     if (interaction.user.id !== YOUR_DISCORD_ID && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
         return interaction.reply({ content: 'Tylko administrator może zarządzać zgłoszeniem.', ephemeral: true });
     }
 
     const targetId = interaction.channel.topic; 
 
-    // ZAMKNIJ TICKET (Odbiera dostęp graczowi)
     if (interaction.customId === 'close_ticket') {
         if (targetId && targetId !== 'brak_id') {
             await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
@@ -175,7 +179,6 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: '🔒 Zgłoszenie zamknięte. Użytkownik stracił dostęp do kanału.', components: [reopenRow] });
     }
 
-    // OTWÓRZ TICKET (Przywraca dostęp graczowi)
     if (interaction.customId === 'open_ticket') {
         if (targetId && targetId !== 'brak_id') {
             await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: true }).catch(() => null);
@@ -189,29 +192,81 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: `🔓 Zgłoszenie otwarte. Użytkownik <@${targetId}> znów widzi kanał.`, components: [closeRow] });
     }
 
-    // ARCHIWIZUJ TICKET (Zapisuje log do TXT, wysyła Ci na PW i usuwa kanał)
     if (interaction.customId === 'archive_ticket') {
         await interaction.reply('📁 Generuję archiwum... Kanał zostanie usunięty za 5 sekund.');
         
         try {
-            // Pobieranie historii kanału
             let messages = await interaction.channel.messages.fetch({ limit: 100 });
-            let logText = messages.reverse().map(m => `[${m.createdAt.toLocaleString('pl-PL')}] ${m.author.username}: ${m.content}`).join('\n');
+            messages = Array.from(messages.values()).reverse();
             
-            if (logText.trim() === '') logText = 'Brak wiadomości tekstowych w tickecie.';
+            // Generowanie kodu HTML
+            let htmlContent = `
+            <!DOCTYPE html>
+            <html lang="pl">
+            <head>
+                <meta charset="utf-8">
+                <title>Archiwum - ${interaction.channel.name}</title>
+                <style>
+                    body { background-color: #313338; color: #dbdee1; font-family: sans-serif; padding: 20px; }
+                    .message { margin-bottom: 15px; display: flex; flex-direction: column; }
+                    .header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 5px; }
+                    .author { color: #f2f3f5; font-weight: bold; font-size: 16px; }
+                    .date { color: #949ba4; font-size: 12px; }
+                    .content { font-size: 15px; line-height: 1.4; white-space: pre-wrap; background: #2b2d31; padding: 10px; border-radius: 6px; display: inline-block; max-width: 80%; }
+                </style>
+            </head>
+            <body>
+                <h2>Archiwum kanału: ${interaction.channel.name}</h2>
+                <hr style="border-color: #404249; margin-bottom: 20px;">
+            `;
 
-            const attachment = new AttachmentBuilder(Buffer.from(logText, 'utf-8'), { name: `archiwum-${interaction.channel.name}.txt` });
+            if (messages.length === 0) {
+                htmlContent += `<p>Brak wiadomości tekstowych w tickecie.</p>`;
+            } else {
+                messages.forEach(m => {
+                    const content = m.content || '[Załącznik/Embed]';
+                    htmlContent += `
+                    <div class="message">
+                        <div class="header">
+                            <span class="author">${m.author.username}</span>
+                            <span class="date">${m.createdAt.toLocaleString('pl-PL')}</span>
+                        </div>
+                        <div class="content">${content}</div>
+                    </div>
+                    `;
+                });
+            }
+            htmlContent += `</body></html>`;
+
+            const attachment = new AttachmentBuilder(Buffer.from(htmlContent, 'utf-8'), { name: `archiwum-${interaction.channel.name}.html` });
             
-            // Wysłanie PW do Ciebie
-            const adminUser = await client.users.fetch(YOUR_DISCORD_ID);
-            await adminUser.send({ content: `📁 Zarchiwizowano zgłoszenie: **${interaction.channel.name}**`, files: [attachment] });
+            // Tworzenie embeda do logów
+            const embedLog = new EmbedBuilder()
+                .setColor('#2b2d31')
+                .setAuthor({ name: `📁 Archiwum: ${interaction.channel.name}` })
+                .addFields(
+                    { name: '👤 Utworzył', value: targetId && targetId !== 'brak_id' ? `<@${targetId}>` : 'Z poziomu WWW', inline: true },
+                    { name: '🔒 Zarchiwizował', value: `<@${interaction.user.id}>`, inline: true },
+                    { name: '💬 Wiadomości', value: `${messages.length}`, inline: true }
+                )
+                .setFooter({ text: 'rapldez OS • Logi Zgłoszeń' })
+                .setTimestamp();
+
+            const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
+            
+            if (logChannel) {
+                await logChannel.send({ embeds: [embedLog], files: [attachment] });
+            } else {
+                // Zabezpieczenie: jeśli nie ma kanału logów, wysyła na PW
+                const adminUser = await client.users.fetch(YOUR_DISCORD_ID);
+                await adminUser.send({ content: `⚠️ Nie skonfigurowano ID kanału logów. Archiwum: **${interaction.channel.name}**`, embeds: [embedLog], files: [attachment] });
+            }
+
         } catch (err) {
-            console.log('Błąd archiwizacji (mogło zablokować PW):', err);
+            console.log('Błąd archiwizacji:', err);
         }
 
-        setTimeout(() => {
-            interaction.channel.delete().catch(() => null);
-        }, 5000);
+        setTimeout(() => { interaction.channel.delete().catch(() => null); }, 5000);
     }
 });
 
@@ -219,9 +274,7 @@ const PORT = process.env.PORT || 3000;
 
 client.once('ready', () => {
     console.log(`Bot zalogowany jako ${client.user.tag}`);
-    app.listen(PORT, () => {
-        console.log(`Serwer i bot działają na porcie ${PORT}!`);
-    });
+    app.listen(PORT, () => { console.log(`Serwer i bot działają na porcie ${PORT}!`); });
 });
 
 client.login(BOT_TOKEN);
