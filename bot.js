@@ -289,7 +289,6 @@ app.post('/api/terminal', async (req, res) => {
         return res.json({ output: `Znaleziono słowo "${query}" w ticketach (${results.length}):\n${names}` });
     }
 
-    // KOMENDA GIVEAWAY - CZYSTE DYNAMICZNE ODLICZANIE CZASU
     if (cmdLower === 'giveaway') {
         const channelId = cmdArgs[1];
         const minutes = parseInt(cmdArgs[2]);
@@ -469,9 +468,13 @@ const SPAM_TIME = 4000;
 const SPAM_DUPLICATES = 4; 
 const TIMEOUT_DURATION = 5 * 60 * 1000; 
 
+// Mapa śledząca aktywne kanały głosowe: channelId -> ownerId
+const tempVoiceChannels = new Map();
+
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
+    // --- SYSTEM ANTY-SPAM ---
     if (message.author.id !== YOUR_DISCORD_ID && !message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
         const userId = message.author.id;
         const currentTime = Date.now();
@@ -517,6 +520,78 @@ client.on('messageCreate', async message => {
             return; 
         }
     }
+
+    // --- ZARZĄDZANIE PRYWATNYMI POKOJAMI GŁOSOWYMI (PUNKT 13) ---
+    const voiceCommands = ['!lock', '!unlock', '!permit', '!reject', '!limit', '!name'];
+    const firstWord = message.content.split(' ')[0].toLowerCase();
+
+    if (voiceCommands.includes(firstWord)) {
+        let userVoiceChannel = message.member?.voice?.channel;
+        
+        // Sprawdzamy czy autor siedzi w swoim prywatnym pokoju
+        if (!userVoiceChannel || !tempVoiceChannels.has(userVoiceChannel.id)) {
+            // Szukamy czy w ogóle ma jakiś utworzony kanał
+            for (const [chanId, ownerId] of tempVoiceChannels.entries()) {
+                if (ownerId === message.author.id) {
+                    userVoiceChannel = message.guild.channels.cache.get(chanId);
+                    break;
+                }
+            }
+        }
+
+        if (!userVoiceChannel || !tempVoiceChannels.has(userVoiceChannel.id)) {
+            return message.reply('❌ Nie posiadasz aktywnego pokoju prywatnego lub w nim nie przebywasz.').then(m => setTimeout(() => m.delete().catch(()=>null), 4000));
+        }
+
+        const channelOwnerId = tempVoiceChannels.get(userVoiceChannel.id);
+        if (channelOwnerId !== message.author.id && message.author.id !== YOUR_DISCORD_ID) {
+            return message.reply('❌ Nie jesteś właścicielem tego pokoju głosowego.').then(m => setTimeout(() => m.delete().catch(()=>null), 4000));
+        }
+
+        const args = message.content.split(' ');
+
+        if (firstWord === '!lock') {
+            await userVoiceChannel.permissionOverwrites.edit(message.guild.id, { Connect: false });
+            return message.reply('🔒 Twój pokój został zablokowany dla wszystkich.');
+        }
+
+        if (firstWord === '!unlock') {
+            await userVoiceChannel.permissionOverwrites.edit(message.guild.id, { Connect: null });
+            return message.reply('🔓 Twój pokój został odblokowany.');
+        }
+
+        if (firstWord === '!permit') {
+            const target = message.mentions.members.first();
+            if (!target) return message.reply('Podaj użytkownika: `!permit @user`');
+            await userVoiceChannel.permissionOverwrites.edit(target.id, { Connect: true });
+            return message.reply(`✅ <@${target.id}> otrzymał stały dostęp do Twojego pokoju.`);
+        }
+
+        if (firstWord === '!reject') {
+            const target = message.mentions.members.first();
+            if (!target) return message.reply('Podaj użytkownika: `!reject @user`');
+            await userVoiceChannel.permissionOverwrites.edit(target.id, { Connect: false });
+            if (target.voice?.channelId === userVoiceChannel.id) {
+                await target.voice.disconnect().catch(() => {});
+            }
+            return message.reply(`🚫 <@${target.id}> został zablokowany i usunięty z pokoju.`);
+        }
+
+        if (firstWord === '!limit') {
+            const limit = parseInt(args[1]);
+            if (isNaN(limit) || limit < 0 || limit > 99) return message.reply('Podaj poprawną liczbę slotów (0-99): `!limit 2`');
+            await userVoiceChannel.setUserLimit(limit);
+            return message.reply(`👥 Zmieniono limit osób na kanale na: \`${limit === 0 ? 'Bez limitu' : limit}\`.`);
+        }
+
+        if (firstWord === '!name') {
+            const newName = args.slice(1).join(' ');
+            if (!newName) return message.reply('Podaj nową nazwę pokoju: `!name Moja Ekipa`');
+            await userVoiceChannel.setName(`🔒 | ${newName}`);
+            return message.reply(`✏️ Nazwa Twojego pokoju została zmieniona na: \`🔒 | ${newName}\`.`);
+        }
+    }
+    // --- KONIEC POKOI GŁOSOWYCH ---
 
     if (message.content.startsWith('!clear') && message.author.id === YOUR_DISCORD_ID) {
         const amount = parseInt(message.content.split(' ')[1]);
@@ -628,13 +703,10 @@ client.on('messageUpdate', (oldMsg, newMsg) => {
     sendServerLog(action, `**Autor:** <@${oldMsg.author?.id}>\n**Kanał:** <#${oldMsg.channel.id}>\n\n**Przed:**\n\`\`\`text\n${oldMsg.content || 'Brak'}\n\`\`\`**Po:**\n\`\`\`text\n${newMsg.content || 'Brak'}\n\`\`\``);
 });
 
-// Map do śledzenia dynamicznych kanałów głosowych
-const tempVoiceChannels = new Map();
-
+// Dynamiczne pokoje głosowe i logi
 client.on('voiceStateUpdate', async (oldState, newState) => {
     const user = `<@${newState.id}>`;
     
-    // Logi głosowe
     if (!oldState.channelId && newState.channelId) sendServerLog('🔊 Dołączenie do kanału głosowego', `Członek ${user} wszedł na kanał <#${newState.channelId}>.`);
     else if (oldState.channelId && !newState.channelId) sendServerLog('🔇 Opuszczenie kanału głosowego', `Członek ${user} opuścił kanał <#${oldState.channelId}>.`);
     else if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) sendServerLog('🔀 Przełączenie kanału głosowego', `Członek ${user} przeszedł z <#${oldState.channelId}> na <#${newState.channelId}>.`);
@@ -644,6 +716,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     }
 
     try {
+        // Wejście na kanał tworzenia
         if (newState.channelId === VOICE_CREATOR_CHANNEL_ID) {
             const guild = newState.guild;
             const member = newState.member;
@@ -660,15 +733,21 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
                     },
                     {
                         id: member.id,
-                        allow: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.MuteMembers, PermissionsBitField.Flags.DeafenMembers, PermissionsBitField.Flags.MoveMembers],
+                        allow: [PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak, PermissionsBitField.Flags.MuteMembers, PermissionsBitField.Flags.DeafenMembers, PermissionsBitField.Flags.MoveMembers],
                     }
                 ]
             });
 
             await member.voice.setChannel(createdChannel).catch(() => {});
             tempVoiceChannels.set(createdChannel.id, member.id);
+
+            // Krótka instrukcja dla właściciela na czacie nowo utworzonego kanału
+            createdChannel.send({
+                content: `👋 <@${member.id}> Oto Twój pokój prywatny!\n**Dostępne komendy:**\n• \`!lock\` / \`!unlock\` - blokuj/odblokuj pokój\n• \`!permit @user\` / \`!reject @user\` - zarządzaj gośćmi\n• \`!limit [liczba]\` - ustaw limit osób\n• \`!name [nazwa]\` - zmień nazwę pokoju`
+            }).catch(() => {});
         }
 
+        // Opuszczenie kanału i sprzątanie
         if (oldState.channelId && oldState.channelId !== VOICE_CREATOR_CHANNEL_ID) {
             const oldChannel = oldState.channel;
             if (oldChannel && tempVoiceChannels.has(oldChannel.id) && oldChannel.members.size === 0) {
@@ -741,7 +820,7 @@ client.on('roleDelete', r => sendServerLog('🗑️ Usunięcie roli', `Usunięto
 client.on('guildBanAdd', ban => sendServerLog('🔨 Zbanowanie członka', `Zbanowano \`${ban.user.tag}\`.`));
 client.on('guildBanRemove', ban => sendServerLog('🕊️ Odbanowanie członka', `Odbanowano \`${ban.user.tag}\`.`));
 
-// --- PĘTLA SPRAWDZAJĄCA ZAKOŃCZENIE GIVEAWAYÓW ---
+// Pętla rozliczania konkursów
 setInterval(async () => {
     try {
         const activeGiveaways = await Giveaway.find({ ended: false, endsAt: { $lte: Date.now() } });
@@ -855,13 +934,10 @@ client.once('ready', async () => {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
-    // Przycisk dołączania do Giveawaya z poprawnym odświeżaniem opisu
     if (interaction.customId === 'join_giveaway') {
         try {
             const g = await Giveaway.findOne({ messageId: interaction.message.id, ended: false });
-            if (!g) {
-                return interaction.reply({ content: '❌ Ten konkurs już się zakończył.', ephemeral: true });
-            }
+            if (!g) return interaction.reply({ content: '❌ Ten konkurs już się zakończył.', ephemeral: true });
 
             let left = false;
             if (g.participants.includes(interaction.user.id)) {
