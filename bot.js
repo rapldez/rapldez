@@ -169,7 +169,7 @@ app.get('/api/views', async (req, res) => {
     }
 });
 
-// FORMULARZ KONTAKTOWY (ZGŁOSZENIE-X)
+// FORMULARZ KONTAKTOWY (ZGŁOSZENIE-X) - POJEDYNCZY ENDPOINT BEZ DUPLIKATÓW
 app.post('/api/kontakt', async (req, res) => {
     const { nick, subject, message } = req.body;
     if (!nick || !message || !subject) return res.status(400).json({ error: 'Brakujące dane' });
@@ -217,10 +217,10 @@ app.post('/api/kontakt', async (req, res) => {
         );
 
         await newChannel.send({ content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie ze strony!`, embeds: [embed], components: [row] });
-        res.status(200).json({ message: 'Zgłoszenie wysłane!' });
+        return res.status(200).json({ message: 'Zgłoszenie wysłane!' });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Wystąpił błąd serwera.' });
+        return res.status(500).json({ message: 'Wystąpił błąd serwera.' });
     }
 });
 
@@ -507,10 +507,11 @@ client.on('interactionCreate', async interaction => {
     let createdAtStr = parts[1] || formatDatePL(new Date());
 
     if (interaction.customId === 'close_ticket') {
+        if (targetId && targetId !== 'brak_id') await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
+        
         const closedAtStr = formatDatePL(new Date());
         await interaction.channel.setTopic(`${targetId}|${createdAtStr}|${closedAtStr}`).catch(() => null);
 
-        // Zmiana nazwy na rozwiązany-X
         const allChannels = interaction.guild.channels.cache;
         const resolvedCount = allChannels.filter(c => c.name.startsWith('rozwiązany-')).size + 1;
         await interaction.channel.setName(`rozwiązany-${resolvedCount}`).catch(() => null);
@@ -527,7 +528,6 @@ client.on('interactionCreate', async interaction => {
             await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true }).catch(() => null);
         }
         
-        // Powrót do unikalnej nazwy zgłoszenie z licznikiem bazującym na ID kanału lub całkowitej liczbie
         const ticketNumber = interaction.channel.name.replace(/[^0-9]/g, '') || '1';
         await interaction.channel.setName(`zgłoszenie-${ticketNumber}`).catch(() => null);
 
