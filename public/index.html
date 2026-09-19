@@ -118,7 +118,7 @@
     <div id="embed-builder-overlay">
         <div class="contact-window">
             <div class="contact-header" style="display:flex; justify-content:space-between; margin-bottom:15px; color:#fff; font-weight:bold; align-items:center; flex-wrap: wrap; gap: 10px;">
-                <span><i class="fa-solid fa-wand-magic-sparkles" style="color: #024442;"></i> Kreator Embedów (Szablony & JSON)</span>
+                <span><i class="fa-solid fa-wand-magic-sparkles" style="color: #024442;"></i> Kreator Embedów (Szablony & Edycja)</span>
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                     <select id="embed-preset-select" class="builder-input" style="padding: 4px 8px; font-size: 11px; width: 150px;" onchange="loadPreset(this.value)">
                         <option value="">-- Wybierz szablon --</option>
@@ -136,6 +136,14 @@
                     <div style="display: flex; flex-direction: column; gap: 4px;">
                         <span class="builder-label">ID Kanału Docelowego (Wymagane)</span>
                         <input type="text" id="embed-channel" class="builder-input" placeholder="np. 1550753070726512730" required>
+                    </div>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span class="builder-label">Opcjonalne ID Wiadomości (do edycji)</span>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="embed-message-id" class="builder-input" placeholder="ID istniejącej wiadomości">
+                            <button onclick="loadExistingMessage()" style="background:#5865F2; color:#fff; border:none; border-radius:4px; padding:0 12px; cursor:pointer; font-size: 12px; font-weight:bold;">Wczytaj</button>
+                        </div>
                     </div>
 
                     <div style="display: flex; flex-direction: column; gap: 4px;">
@@ -477,6 +485,7 @@
             });
             return {
                 channelId: document.getElementById('embed-channel').value.trim(),
+                messageId: document.getElementById('embed-message-id').value.trim(),
                 content: document.getElementById('embed-content').value.trim(),
                 authorName: document.getElementById('embed-author-name').value.trim(),
                 authorUrl: document.getElementById('embed-author-url').value.trim(),
@@ -493,12 +502,66 @@
             };
         }
 
+        // --- NOWA FUNKCJA WCZYTYWANIA Z SERWERA ---
+        async function loadExistingMessage() {
+            const channelId = document.getElementById('embed-channel').value.trim();
+            const messageId = document.getElementById('embed-message-id').value.trim();
+            const status = document.getElementById('embed-status');
+            
+            if (!channelId || !messageId) {
+                status.style.color = '#f23f42';
+                status.innerText = 'Podaj ID kanału oraz ID wiadomości!';
+                return;
+            }
+
+            status.style.color = '#fbc02d';
+            status.innerText = 'Pobieranie...';
+
+            try {
+                const res = await fetch(`/api/fetch-message/${channelId}/${messageId}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    status.style.color = '#f23f42';
+                    status.innerText = data.error;
+                    return;
+                }
+
+                document.getElementById('embed-content').value = data.content || '';
+                document.getElementById('embed-author-name').value = data.authorName || '';
+                document.getElementById('embed-author-url').value = data.authorUrl || '';
+                document.getElementById('embed-author-icon').value = data.authorIcon || '';
+                document.getElementById('embed-title').value = data.title || '';
+                document.getElementById('embed-desc').value = data.description || '';
+                document.getElementById('embed-color-text').value = data.color || '#024442';
+                document.getElementById('embed-color-picker').value = data.color || '#024442';
+                document.getElementById('embed-image').value = data.image || '';
+                document.getElementById('embed-thumbnail').value = data.thumbnail || '';
+                document.getElementById('embed-footer').value = data.footer || '';
+                document.getElementById('embed-footer-icon').value = data.footerIcon || '';
+                document.getElementById('embed-timestamp').checked = data.timestamp;
+
+                document.getElementById('buttons-container').innerHTML = '';
+                if(data.buttons && Array.isArray(data.buttons)) {
+                    data.buttons.forEach(b => addButtonField(b));
+                }
+                
+                updatePreview();
+                status.style.color = '#23a559';
+                status.innerText = '✅ Wczytano pomyślnie!';
+                setTimeout(() => status.innerText = '', 2000);
+            } catch(e) {
+                status.style.color = '#f23f42';
+                status.innerText = 'Błąd komunikacji z serwerem.';
+            }
+        }
+
         async function sendEmbed() {
             const data = collectData();
             const status = document.getElementById('embed-status');
             if (!data.channelId) { status.style.color = '#f23f42'; status.innerText = 'Podaj ID kanału!'; return; }
 
-            status.innerText = 'Wysyłanie...';
+            status.innerText = data.messageId ? 'Edytowanie...' : 'Wysyłanie...';
             status.style.color = '#23a559';
             
             try {
@@ -509,7 +572,7 @@
                 });
                 const result = await res.json();
                 if (result.success) {
-                    status.innerText = '✅ Wysłano na serwer!';
+                    status.innerText = result.message;
                     setTimeout(() => { closeEmbedBuilder(); status.innerText = ''; }, 1500);
                 } else { status.style.color = '#f23f42'; status.innerText = result.error || 'Błąd.'; }
             } catch (e) { status.style.color = '#f23f42'; status.innerText = 'Błąd z backendem.'; }
