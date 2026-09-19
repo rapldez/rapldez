@@ -1,3 +1,4 @@
+const panelRouter = require('./panel');
 const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const express = require('express');
 const cors = require('cors');
@@ -7,7 +8,6 @@ const session = require('express-session');
 const fetch = require('node-fetch');
 const app = express();
 app.use('/', panelRouter);
-const panelRouter = require('./panel');
 
 
 // --- SPRAWDZANIE ZMIENNYCH ŚRODOWISKOWYCH (.env) ---
