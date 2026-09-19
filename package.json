@@ -1,0 +1,14 @@
+{
+  "name": "rapldez-bot-site",
+  "version": "1.0.0",
+  "description": "Strona i bot Discord",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "discord.js": "^14.14.1",
+    "express": "^4.19.2"
+  }
+}
