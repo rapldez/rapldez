@@ -445,7 +445,7 @@ app.post('/api/send-embed', async (req, res) => {
             res.json({ success: true, message: 'Wiadomość zaktualizowana pomyślnie!' });
         } else {
             await targetChannel.send(payload);
-            logToTerminalDiscord('📝 Kreator Embedów', `Użytkownik **${req.session.user.username}** wysłał embed na kanale <#${channelId}>.`);
+            logToTerminalDiscord('📝 Kreator Embedów', `Użytkownik **${req.session.user.username}** wysłał embed na kanał <#${channelId}>.`);
             res.json({ success: true, message: 'Wiadomość z embedem wysłana!' });
         }
     } catch (err) {
@@ -552,12 +552,12 @@ client.on('messageCreate', async message => {
 
     // --- KOMENDA: KLONOWANIE UPRAWNIEŃ KANAŁÓW (!sync-perms) ---
     if (message.content.startsWith('!sync-perms') && message.author.id === YOUR_DISCORD_ID) {
-        const args = message.content.split(' ');
-        const sourceChannel = message.mentions.channels.first() || message.guild.channels.cache.get(args[1]);
-        const targetChannel = message.guild.channels.cache.get(args[2]) || message.channel;
+        const mentionedChannels = Array.from(message.mentions.channels.values());
+        const sourceChannel = mentionedChannels[0];
+        const targetChannel = mentionedChannels[1] || message.channel;
 
         if (!sourceChannel) {
-            return message.reply('❌ Użycie: `!sync-perms #wzorcowy-kanal [#docelowy-kanal]`');
+            return message.reply('❌ Użycie: `!sync-perms #wzorcowy-kanal #docelowy-kanal`');
         }
 
         try {
@@ -599,7 +599,7 @@ client.on('messageCreate', async message => {
 
         const channelOwnerId = tempVoiceChannels.get(userVoiceChannel.id);
         if (channelOwnerId !== message.author.id && message.author.id !== YOUR_DISCORD_ID) {
-            return message.reply('❌ Nie jesteś właścicielem tego pokoju głosowego.').then(m => setTimeout(() => m.delete().catch(()=>null), 4000));
+            return message.reply('❌ Не jesteś właścicielem tego pokoju głosowego.').then(m => setTimeout(() => m.delete().catch(()=>null), 4000));
         }
 
         const args = message.content.split(' ');
