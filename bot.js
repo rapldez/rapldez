@@ -507,10 +507,8 @@ client.on('interactionCreate', async interaction => {
     let createdAtStr = parts[1] || formatDatePL(new Date());
 
     if (interaction.customId === 'close_ticket') {
-        if (targetId && targetId !== 'brak_id') await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
-        
         const closedAtStr = formatDatePL(new Date());
-        interaction.channel.setTopic(`${targetId}|${createdAtStr}|${closedAtStr}`).catch(() => null);
+        await interaction.channel.setTopic(`${targetId}|${createdAtStr}|${closedAtStr}`).catch(() => null);
 
         // Zmiana nazwy na rozwiązany-X
         const allChannels = interaction.guild.channels.cache;
@@ -521,22 +519,23 @@ client.on('interactionCreate', async interaction => {
             new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
         );
-        await interaction.reply({ content: `🔒 Zgłoszenie zamknięte i oznaczone jako rozwiązane (${closedAtStr}).`, components: [reopenRow] });
+        await interaction.update({ content: `🔒 Zgłoszenie zamknięte i oznaczone jako rozwiązane (${closedAtStr}).`, components: [reopenRow] });
     }
 
     if (interaction.customId === 'open_ticket') {
-        if (targetId && targetId !== 'brak_id') await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: true }).catch(() => null);
+        if (targetId && targetId !== 'brak_id') {
+            await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true }).catch(() => null);
+        }
         
-        // Powrót do zgłoszenie-X po ponownym otwarciu
-        const allChannels = interaction.guild.channels.cache;
-        const ticketCount = allChannels.filter(c => c.name.startsWith('zgłoszenie-')).size + 1;
-        await interaction.channel.setName(`zgłoszenie-${ticketCount}`).catch(() => null);
+        // Powrót do unikalnej nazwy zgłoszenie z licznikiem bazującym na ID kanału lub całkowitej liczbie
+        const ticketNumber = interaction.channel.name.replace(/[^0-9]/g, '') || '1';
+        await interaction.channel.setName(`zgłoszenie-${ticketNumber}`).catch(() => null);
 
         const closeRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
         );
-        await interaction.reply({ content: `🔓 Zgłoszenie otwarte dla <@${targetId}>.`, components: [closeRow] });
+        await interaction.update({ content: `🔓 Zgłoszenie zostało ponownie otwarte.`, components: [closeRow] });
     }
 
     if (interaction.customId === 'archive_ticket') {
