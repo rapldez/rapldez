@@ -1,14 +1,22 @@
-const panelRouter = require('./panel');
-const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const mongoose = require('mongoose');
 const session = require('express-session');
 const fetch = require('node-fetch');
-const app = express();
-app.use('/', panelRouter);
+const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 
+const app = express();
+
+// --- OD PALENIE SERWERA WWW OD RAZU DLA RENDERA ---
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+    console.log(`Serwer działa na porcie ${PORT}!`);
+});
+
+// Podpięcie osobnego panelu zarządzania i terminala z pliku panel.js
+const panelRouter = require('./panel');
+app.use('/', panelRouter);
 
 // --- SPRAWDZANIE ZMIENNYCH ŚRODOWISKOWYCH (.env) ---
 const requiredEnv = ['BOT_TOKEN', 'MONGO_URI', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI'];
@@ -115,7 +123,6 @@ const giveawaySchema = new mongoose.Schema({
 });
 const Giveaway = mongoose.model('Giveaway', giveawaySchema);
 
-// Schemat ankiet z czasem trwania
 const pollSchema = new mongoose.Schema({
     messageId: String,
     channelId: String,
@@ -208,7 +215,6 @@ app.get('/api/views', async (req, res) => {
     }
 });
 
-// Szablony Embedów API
 app.get('/api/embed-presets', async (req, res) => {
     try { const presets = await EmbedPreset.find({}, 'name'); res.json(presets); } catch(e) { res.json([]); }
 });
@@ -281,207 +287,6 @@ app.post('/api/kontakt', async (req, res) => {
     }
 });
 
-// TERMINAL API
-app.post('/api/terminal', async (req, res) => {
-    const cmd = req.body.command ? req.body.command.trim() : '';
-    if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ output: 'Odmowa dostępu.' });
-
-    logToTerminalDiscord('⌨️ Wykonano polecenie WWW', `**Komenda:** \`${cmd || '[Puste]'}\``);
-    const cmdArgs = cmd.split(' ');
-    const cmdLower = cmdArgs[0].toLowerCase();
-
-    if (cmdLower === 'sysinfo') return res.json({ output: `Uptime: ${Math.floor(process.uptime())}s | RAM: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB \vert{} Ping:${client.ws.ping}ms` });
-    
-    if (cmdLower === 'db' && cmdArgs[1] === 'stats') {
-        const tickCount = await TicketArchive.countDocuments();
-        const views = await Counter.findOne({ id: 'views' });
-        return res.json({ output: `Statystyki bazy:\n- Zarchiwizowane tickety: ${tickCount}\n- Odsłony strony: ${views?.count || 0}` });
-    }
-    
-    if (cmdLower === 'paste' && cmdArgs.length > 1) {
-        const shortId = Math.random().toString(36).substring(2, 8);
-        await Paste.create({ shortId, content: cmd.substring(6), createdAt: formatDatePL(new Date()) });
-        return res.json({ output: `Zapisano kod. Link: https://rapldez.onrender.com/p/${shortId}` });
-    }
-    
-    if (cmdLower === 'bot' && cmdArgs[1] === 'status') {
-        client.user.setActivity(cmd.substring(11));
-        return res.json({ output: `Status zmieniony na: "${cmd.substring(11)}"` });
-    }
-
-    if (cmdLower === 'search' && cmdArgs.length > 1) {
-        const query = cmdArgs.slice(1).join(' ');
-        const results = await TicketArchive.find({ htmlContent: { $regex: query,$options: 'i' } });
-        if (results.length === 0) return res.json({ output: `Brak wyników w bazie dla słowa: "${query}"` });
-        const names = results.map(r => r.channelName).join(', ');
-        return res.json({ output: `Znaleziono słowo "${query}" w ticketach (${results.length}):\n${names}` });
-    }
-
-    if (cmdLower === 'giveaway') {
-        const channelId = cmdArgs[1];
-        const minutes = parseInt(cmdArgs[2]);
-        const prize = cmdArgs.slice(3).join(' ');
-
-        if (!channelId || isNaN(minutes) || !prize) {
-            return res.json({ output: 'Użycie: giveaway [ID_KANAŁU] [CZAS_W_MINUTACH] [NAGRODA]' });
-        }
-
-        const channel = client.channels.cache.get(channelId);
-        if (!channel) return res.json({ output: 'Błąd: Nie znaleziono kanału o podanym ID.' });
-
-        const endsAt = Date.now() + (minutes * 60 * 1000);
-        const unixTime = Math.floor(endsAt / 1000);
-
-        const embed = new EmbedBuilder()
-            .setColor(MAIN_COLOR)
-            .setAuthor({ name: '🎉 ROZPOCZĘTO KONKURS (GIVEAWAY)' })
-            .setTitle(prize)
-            .setDescription(`>>> **• Nagroda:** \`${prize}\`\n**• Zakończenie:** <t:${unixTime}:R>\n**• Dokładna data:** <t:${unixTime}:f>\n**• Uczestnicy:** \`0\`\n\nKliknij przycisk poniżej, aby dołączyć!`)
-            .setFooter({ text: 'rapldez OS • Konkursy' })
-            .setTimestamp();
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('join_giveaway').setLabel('Dołącz do losowania').setStyle(ButtonStyle.Success).setEmoji('🎉')
-        );
-
-        const gMsg = await channel.send({ embeds: [embed], components: [row] });
-        await Giveaway.create({
-            messageId: gMsg.id,
-            channelId: channel.id,
-            prize: prize,
-            endsAt: endsAt,
-            participants: []
-        });
-
-        return res.json({ output: `Wystartowano giveaway na kanale <#${channelId}> na ${minutes} minut. Nagroda: ${prize}` });
-    }
-
-    return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo], giveaway [kanał] [minuty] [nagroda]` });
-});
-
-// POBIERANIE WIADOMOŚCI DO EDYCJI
-app.get('/api/fetch-message/:channelId/:messageId', async (req, res) => {
-    if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ error: 'Brak uprawnień roota.' });
-    try {
-        const channel = client.channels.cache.get(req.params.channelId);
-        if (!channel) return res.status(404).json({ error: 'Nie znaleziono kanału.' });
-        const msg = await channel.messages.fetch(req.params.messageId);
-        if (!msg) return res.status(404).json({ error: 'Nie znaleziono wiadomości.' });
-
-        const embed = msg.embeds[0] || {};
-        const data = {
-            content: msg.content || '',
-            authorName: embed.author?.name || '',
-            authorUrl: embed.author?.url || '',
-            authorIcon: embed.author?.iconURL || '',
-            title: embed.title || '',
-            description: embed.description || '',
-            color: embed.color ? `#${embed.color.toString(16).padStart(6, '0')}` : '#024442',
-            image: embed.image?.url || '',
-            thumbnail: embed.thumbnail?.url || '',
-            footer: embed.footer?.text || '',
-            footerIcon: embed.footer?.iconURL || '',
-            timestamp: !!embed.timestamp,
-            buttons: []
-        };
-
-        if (msg.components && msg.components.length > 0 && msg.components[0].components) {
-            msg.components[0].components.forEach(btn => {
-                let style = 'PRIMARY';
-                if (btn.style === 2) style = 'SECONDARY';
-                if (btn.style === 3) style = 'SUCCESS';
-                if (btn.style === 4) style = 'DANGER';
-                if (btn.style === 5) style = 'LINK';
-                data.buttons.push({
-                    label: btn.label || '',
-                    style: style,
-                    value: btn.url || btn.customId || ''
-                });
-            });
-        }
-        res.json(data);
-    } catch (err) {
-        res.status(500).json({ error: 'Nie można pobrać wiadomości (sprawdź ID).' });
-    }
-});
-
-// ENDPOINT WYSYŁANIA I EDYCJI EMBEDÓW
-app.post('/api/send-embed', async (req, res) => {
-    if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ error: 'Brak uprawnień roota.' });
-    
-    const { channelId, messageId, content, authorName, authorUrl, authorIcon, title, description, color, image, thumbnail, footer, footerIcon, timestamp, buttons } = req.body;
-    if (!channelId || (!description && !title && !content)) return res.status(400).json({ error: 'Wymagane ID kanału oraz treść embedu.' });
-
-    try {
-        const targetChannel = client.channels.cache.get(channelId);
-        if (!targetChannel) return res.status(404).json({ error: 'Nie znaleziono kanału o tym ID.' });
-
-        const embed = new EmbedBuilder();
-        if (color) embed.setColor(color);
-        if (title) embed.setTitle(title);
-        if (description) embed.setDescription(description.replace(/\\n/g, '\n'));
-        
-        if (authorName) {
-            embed.setAuthor({
-                name: authorName,
-                ...(authorUrl && { url: authorUrl }),
-                ...(authorIcon && { iconURL: authorIcon })
-            });
-        }
-
-        if (image) embed.setImage(image);
-        if (thumbnail) embed.setThumbnail(thumbnail);
-        if (footer || footerIcon) {
-            embed.setFooter({ text: footer || '', ...(footerIcon && { iconURL: footerIcon }) });
-        }
-        if (timestamp) embed.setTimestamp();
-
-        const payload = {};
-        if (content) payload.content = content.replace(/\\n/g, '\n');
-        if (description || title || authorName || image || thumbnail || footer) payload.embeds = [embed];
-
-        if (buttons && buttons.length > 0) {
-            const row = new ActionRowBuilder();
-            buttons.forEach((btn, idx) => {
-                let style = ButtonStyle.Primary;
-                if (btn.style === 'SECONDARY') style = ButtonStyle.Secondary;
-                if (btn.style === 'SUCCESS') style = ButtonStyle.Success;
-                if (btn.style === 'DANGER') style = ButtonStyle.Danger;
-                if (btn.style === 'LINK') style = ButtonStyle.Link;
-
-                const bBuilder = new ButtonBuilder()
-                    .setLabel(btn.label || `Przycisk ${idx+1}`)
-                    .setStyle(style);
-
-                if (style === ButtonStyle.Link) {
-                    bBuilder.setURL(btn.value || 'https://discord.com');
-                } else {
-                    bBuilder.setCustomId(`custom_btn_${Date.now()}_${idx}`);
-                }
-                row.addComponents(bBuilder);
-            });
-            payload.components = [row];
-        } else {
-            payload.components = [];
-        }
-
-        if (messageId) {
-            const msgToEdit = await targetChannel.messages.fetch(messageId);
-            if (!msgToEdit) return res.status(404).json({ error: 'Nie znaleziono wiadomości o tym ID na podanym kanale.' });
-            await msgToEdit.edit(payload);
-            logToTerminalDiscord('📝 Edytor Embedów', `Użytkownik **${req.session.user.username}** zaktualizował embed na kanale <#${channelId}>.`);
-            res.json({ success: true, message: 'Wiadomość zaktualizowana pomyślnie!' });
-        } else {
-            await targetChannel.send(payload);
-            logToTerminalDiscord('📝 Kreator Embedów', `Użytkownik **${req.session.user.username}** wysłał embed na kanał <#${channelId}>.`);
-            res.json({ success: true, message: 'Wiadomość z embedem wysłana!' });
-        }
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Błąd podczas wysyłania/edycji.' });
-    }
-});
-
 app.get('/p/:id', async (req, res) => {
     const paste = await Paste.findOne({ shortId: req.params.id });
     if (!paste) return res.send('Brak kodu o tym ID.');
@@ -505,7 +310,6 @@ client.on('messageCreate', async message => {
         const userId = message.author.id;
         const msgContent = message.content.toLowerCase();
 
-        // 1. DETEKTOR SCAM-LINKÓW
         const scamRegex = /(discorcl|dlscord|discord-nitro|discord-app|nitro-gift|steamcommunitly|stearmcommunity|steam-nitro|free-nitro|discord\.xyz|discord-gift|gift-nitro)/i;
         const isRealDiscord = msgContent.includes('discord.com') || msgContent.includes('discord.gg');
         
@@ -520,7 +324,6 @@ client.on('messageCreate', async message => {
             return;
         }
 
-        // 2. TARCZA MASOWYCH WZMIANEK
         const mentionCount = message.mentions.users.size + message.mentions.roles.size;
         const hasEveryone = message.content.includes('@everyone') || message.content.includes('@here');
         
@@ -535,7 +338,6 @@ client.on('messageCreate', async message => {
             return;
         }
 
-        // 3. ORYGINALNY SYSTEM ANTY-SPAM
         const currentTime = Date.now();
         if (!userSpamMap.has(userId)) {
             userSpamMap.set(userId, { timestamps: [], lastMessage: msgContent, duplicateCount: 1 });
@@ -578,7 +380,6 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- KOMENDA: KLONOWANIE UPRAWNIEŃ KANAŁÓW (!sync-perms) ---
     if (message.content.startsWith('!sync-perms') && message.author.id === YOUR_DISCORD_ID) {
         const mentionedChannels = Array.from(message.mentions.channels.values());
         const sourceChannel = mentionedChannels[0];
@@ -620,7 +421,6 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // --- KOMENDA: INTERAKTYWNA ANKIETA Z CZASEM (!poll [minuty] | [pytanie] | [opcja1] | [opcja2]) ---
     if (message.content.startsWith('!poll') && message.author.id === YOUR_DISCORD_ID) {
         const argsText = message.content.substring(5).trim();
         const parts = argsText.split('|').map(p => p.trim()).filter(Boolean);
@@ -635,7 +435,7 @@ client.on('messageCreate', async message => {
         }
 
         const question = parts[1];
-        const options = parts.slice(2, 7); // Maksymalnie 5 opcji
+        const options = parts.slice(2, 7);
 
         if (options.length < 2) {
             return message.reply('❌ Ankieta musi mieć przynajmniej 2 opcje.');
@@ -940,7 +740,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     }
 });
 
-// --- INVITE LOGGER & GUILD MEMBER EVENTS ---
 client.on('guildMemberAdd', async member => {
     let inviteInfo = 'Nieznane / Vanity / Direct';
     try {
@@ -1000,12 +799,10 @@ client.on('roleDelete', r => sendServerLog('🗑️ Usunięcie roli', `Usunięto
 client.on('guildBanAdd', ban => sendServerLog('🔨 Zbanowanie członka', `Zbanowano \`${ban.user.tag}\`.`));
 client.on('guildBanRemove', ban => sendServerLog('🕊️ Odbanowanie członka', `Odbanowano \`${ban.user.tag}\`.`));
 
-// Pętla sprawdzająca zakończenie ankiet oraz konkursów
 setInterval(async () => {
     try {
         const now = Date.now();
 
-        // Ankiety
         const activePolls = await Poll.find({ ended: false, endsAt: { $lte: now } });
         for (const poll of activePolls) {
             poll.ended = true;
@@ -1053,7 +850,6 @@ setInterval(async () => {
             await msg.edit({ embeds: [finalEmbed], components: [] }).catch(() => null);
         }
 
-        // Giveaways
         const activeGiveaways = await Giveaway.find({ ended: false, endsAt: { $lte: now } });
         for (const g of activeGiveaways) {
             g.ended = true;
@@ -1092,11 +888,7 @@ setInterval(async () => {
     }
 }, 10 * 1000);
 
-// --- CYBERNETYCZNE CENTRUM DOWODZENIA (STATUS Z TELEMETRIĄ) ---
 client.once('ready', async () => {
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => { console.log(`Serwer działa na porcie ${PORT}!`); });
-
     try {
         const guild = client.guilds.cache.get(SERVER_ID);
         if (guild) {
@@ -1161,22 +953,14 @@ client.once('ready', async () => {
     }
 });
 
-// --- INTERAKCJE (PRZYCISKI, GIVEAWAY, TICKETY, ANKIETY) ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
-    // Obsługa głosowania w ankietach
     if (interaction.customId.startsWith('poll_vote_')) {
         try {
             const poll = await Poll.findOne({ messageId: interaction.message.id });
-
-            if (!poll) {
-                return interaction.reply({ content: '❌ Ta ankieta już nie istnieje w bazie.', ephemeral: true });
-            }
-
-            if (poll.ended || Date.now() >= poll.endsAt) {
-                return interaction.reply({ content: '❌ Czas na głosowanie w tej ankiecie dobiegł końca!', ephemeral: true });
-            }
+            if (!poll) return interaction.reply({ content: '❌ Ta ankieta już nie istnieje w bazie.', ephemeral: true });
+            if (poll.ended || Date.now() >= poll.endsAt) return interaction.reply({ content: '❌ Czas na głosowanie w tej ankiecie dobiegł końca!', ephemeral: true });
 
             const optionIndex = parseInt(interaction.customId.split('_')[2]);
             const userId = interaction.user.id;
@@ -1231,9 +1015,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId === 'join_giveaway') {
         try {
             const g = await Giveaway.findOne({ messageId: interaction.message.id, ended: false });
-            if (!g) {
-                return interaction.reply({ content: '❌ Ten konkurs już się zakończył.', ephemeral: true });
-            }
+            if (!g) return interaction.reply({ content: '❌ Ten konkurs już się zakończył.', ephemeral: true });
 
             let left = false;
             if (g.participants.includes(interaction.user.id)) {
@@ -1258,7 +1040,6 @@ client.on('interactionCreate', async interaction => {
             await interaction.update({ embeds: [updatedEmbed] });
             return interaction.followUp({ content: left ? '👋 Opuściłeś losowanie.' : '🎉 Zostałeś pomyślnie dodany do losowania! Powodzenia.', ephemeral: true });
         } catch (e) {
-            console.error(e);
             return interaction.reply({ content: 'Błąd podczas zapisywania.', ephemeral: true });
         }
     }
@@ -1303,11 +1084,6 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.update({ embeds: [getStatusEmbed()], components: [statusRow] });
         }
-        return;
-    }
-
-    if (interaction.customId.startsWith('custom_btn_')) {
-        await interaction.reply({ content: 'Przycisk interaktywny wygenerowany z panelu.', ephemeral: true });
         return;
     }
 
@@ -1360,7 +1136,6 @@ client.on('interactionCreate', async interaction => {
         }
         
         const ticketNumber = interaction.channel.name.replace(/[^0-9]/g, '') || '1';
-        
         setTimeout(async () => {
             await interaction.channel.setName(`zgłoszenie-${ticketNumber}`).catch(() => null);
         }, 1000);
@@ -1415,54 +1190,35 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// --- SYSTEM: AUTO-BLOKADA PODEJRZANYCH DOMEN (ANTY-PHISHING) ---
-// Lista domen, które chcesz całkowicie blokować na serwerie
 const BLOCKED_DOMAINS = [
     'steam-gift.com', 
     'discord-nitro.ru', 
     'free-nitros.link',
     'nitro-discord.gg'
-    // Możesz dopisywać kolejne podejrzane adresy w cudzysłowach po przecinku
 ];
 
 client.on('messageCreate', async message => {
-    // Ignorujemy wiadomości od botów i wiadomości prywatne (DM)
     if (message.author.bot || !message.guild) return;
-
     const contentLower = message.content.toLowerCase();
-    
-    // Sprawdzamy, czy wiadomość zawiera którąś z zablokowanych domen
     const isSuspicious = BLOCKED_DOMAINS.some(domain => contentLower.includes(domain));
 
     if (isSuspicious) {
         try {
-            // 1. Kasujemy wiadomość z podejrzanym linkiem
             await message.delete();
-
-            // 2. Wysyłamy ostrzeżenie na kanale
             const warningMsg = await message.channel.send(`⚠️ ${message.author}, Twoja wiadomość została usunięta, ponieważ zawierała potencjalnie niebezpieczną lub zablokowaną domenę!`);
-            
-            // Usuwamy ostrzeżenie po 5 sekundach, żeby nie śmiecić na czacie
             setTimeout(() => warningMsg.delete().catch(() => {}), 5000);
-
-            // 3. (Opcjonalnie) Możesz też wysłać log do swojego kanału administracyjnego
-            // console.log(`[ANTY-PHISHING] Zablokowano link od ${message.author.tag}: ${message.content}`);
-
         } catch (error) {
-            console.error('Błąd podczas usuwania podejrzanego linku:', error);
+            console.error('Błąd anty-phishing:', error);
         }
     }
 });
 
-// --- SYSTEM: GHOST PING DETEKTOR ---
 client.on('messageDelete', async message => {
     if (message.author?.bot || !message.guild || message.mentions.users.size === 0) return;
-
     const mentionedUsers = message.mentions.users.map(user => `<@${user.id}>`).join(', ');
 
-    // Podrasowany embed: czerwony kolor, lepszy układ i ikony
     const logEmbed = {
-        color: 0xff0000, // Czerwony kolor ostrzegawczy
+        color: 0xff0000,
         title: '🚨 Wykryto usunięty Ghost Ping!',
         description: 'Ktoś oznaczył użytkownika, a następnie błyskawicznie skasował wiadomość.',
         fields: [
@@ -1470,19 +1226,15 @@ client.on('messageDelete', async message => {
             { name: '🎯 Oznaczone osoby', value: `> ${mentionedUsers}`, inline: false },
             { name: '💬 Skasowana treść', value: `> ${message.content || '*[Brak tekstu / sam załącznik]*'}`, inline: false }
         ],
-        footer: {
-            text: `ID użytkownika: ${message.author.id}`
-        },
+        footer: { text: `ID użytkownika: ${message.author.id}` },
         timestamp: new Date().toISOString()
     };
 
-    const LOG_CHANNEL_ID = '1550913229893410817'; 
-    const logChannel = message.guild.channels.cache.get(LOG_CHANNEL_ID);
-
+    const LOG_CHANNEL_ID_GHOST = '1550913229893410817'; 
+    const logChannel = message.guild.channels.cache.get(LOG_CHANNEL_ID_GHOST);
     if (logChannel) {
-        logChannel.send({ embeds: [logEmbed] }).catch(err => console.error('Błąd wysyłania logu ghost ping:', err));
+        logChannel.send({ embeds: [logEmbed] }).catch(err => console.error(err));
     }
 });
-
 
 client.login(BOT_TOKEN);
