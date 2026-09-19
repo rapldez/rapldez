@@ -54,36 +54,46 @@ app.post('/api/kontakt', async (req, res) => {
             return res.status(500).json({ message: 'Wystąpił błąd po stronie serwera.' });
         }
 
-        // Pobieramy całą listę członków
-        const membersList = await guild.members.fetch();
         const inputClean = nick.toLowerCase().trim();
-
-        // Podgląd w logach Rendera, kogo bot faktycznie widzi
-        console.log(`[SZUKANIE] Szukam: "${inputClean}". Na serwerze jest ${membersList.size} osób.`);
-
         let member = null;
 
-        // 1. Sprawdzanie, czy użytkownik wpisał bezpośrednio ID (same cyfry)
+        console.log(`[SZUKANIE] Zapytanie: "${inputClean}"`);
+
+        // 1. Twarde szukanie bezpośrednio po ID API Discorda (najskuteczniejsze)
         if (/^\d{17,20}$/.test(inputClean)) {
-            member = membersList.get(inputClean);
+            try {
+                member = await guild.members.fetch(inputClean);
+                console.log(`[SUKCES] Znaleziono po ID bezpośrednio w API Discorda.`);
+            } catch (err) {
+                console.log(`[BŁĄD] API Discorda odrzuciło to ID. Użytkownika nie ma na serwerze.`);
+            }
+        } else {
+            // 2. Tradycyjne szukanie po nicku
+            try {
+                const searchResults = await guild.members.fetch({ query: inputClean, limit: 10 });
+                member = searchResults.find(m => 
+                    m.user.username.toLowerCase() === inputClean || 
+                    (m.user.globalName && m.user.globalName.toLowerCase() === inputClean) ||
+                    (m.nickname && m.nickname.toLowerCase() === inputClean)
+                );
+
+                if (!member) {
+                    const allMembers = await guild.members.fetch(); 
+                    member = allMembers.find(m => 
+                        m.user.username.toLowerCase() === inputClean || 
+                        (m.user.globalName && m.user.globalName.toLowerCase() === inputClean) ||
+                        (m.nickname && m.nickname.toLowerCase() === inputClean)
+                    );
+                }
+            } catch (fetchError) {
+                console.error("Błąd podczas wyszukiwania użytkownika po nicku:", fetchError);
+            }
         }
 
-        // 2. Jeśli nie po ID, szukamy po username, globalName, nickname
         if (!member) {
-            member = membersList.find(m => {
-                const uName = m.user.username ? m.user.username.toLowerCase() : '';
-                const gName = m.user.globalName ? m.user.globalName.toLowerCase() : '';
-                const sNick = m.nickname ? m.nickname.toLowerCase() : '';
-
-                return uName === inputClean || gName === inputClean || sNick === inputClean;
-            });
-        }
-
-        // BLOKADA: Nie znaleziono
-        if (!member) {
-            console.log(`[BŁĄD] Nie znaleziono: ${inputClean}`);
+            console.log(`[BŁĄD KRYTYCZNY] Nikogo takiego nie ma na serwerze.`);
             return res.status(403).json({ 
-                message: 'Nie znaleziono Cię na serwerze. Wpisz swój unikalny username (bez spacji) lub swoje Discord ID!' 
+                message: 'Nie znaleziono Cię. Wpisz swoje ID (same cyfry) - to działa zawsze w 100%!' 
             });
         }
 
