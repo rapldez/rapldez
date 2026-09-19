@@ -313,6 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const commandHistory = [];
     let historyIndex = -1;
 
+    // Web Audio API syntezator dla efektu klawiatury mechanicznej
     const keyAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function playMechanicalSound() {
         if (keyAudioCtx.state === 'suspended') keyAudioCtx.resume();
