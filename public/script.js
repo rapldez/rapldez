@@ -106,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 isAdminLogged = true;
                 if (statusText) statusText.innerHTML = `<span style="color:#23a559;">Zalogowano: ${data.username}</span>`;
                 if (actionContainer) actionContainer.innerHTML = `<button id="logout-btn" style="background:#f23f42; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:11px;">Wyloguj</button>`;
-                if (embedBtn) embedBtn.style.display = 'inline-flex'; // Pokazuj przycisk Kreatora Embedów dla roota
+                if (embedBtn) embedBtn.style.display = 'inline-flex';
                 
                 document.getElementById('logout-btn')?.addEventListener('click', () => {
                     fetch('/api/logout', { method: 'POST' }).then(() => {
@@ -420,4 +420,28 @@ document.addEventListener('DOMContentLoaded', () => {
     fetch('/api/views').then(res => res.json()).then(data => {
         if (data.views) document.getElementById('live-counter').innerText = data.views;
     }).catch(err => {});
+
+    // --- ANIMACJA TYTUŁU STRONY (TYPEWRITER) ---
+    const titleText = "@rapldez";
+    let titleIndex = 0;
+    let direction = 1;
+    function animateTitle() {
+        document.title = titleText.substring(0, titleIndex) || "\u200B";
+        titleIndex += direction;
+        let delay = 250;
+        if (titleIndex === titleText.length + 1) { 
+            direction = -1; 
+            delay = 1500; 
+            titleIndex = titleText.length - 1; 
+        } 
+        else if (titleIndex === 0) { 
+            direction = 1; 
+            delay = 500; 
+        } 
+        else if (direction === -1) { 
+            delay = 100; 
+        }
+        setTimeout(animateTitle, delay);
+    }
+    animateTitle();
 });
