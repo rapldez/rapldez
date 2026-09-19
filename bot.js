@@ -155,7 +155,6 @@ app.post('/api/kontakt', async (req, res) => {
     }
 });
 
-// Endpoint do zdalnego restartowania bota
 app.post('/api/reboot', (req, res) => {
     const { password } = req.body;
     if (password !== 'sigma123') return res.status(403).json({ error: 'Brak uprawnień' });
@@ -168,25 +167,64 @@ app.post('/api/reboot', (req, res) => {
     }, 1000);
 });
 
-// --- KOMENDY NA DISCORDZIE (Kreator ogłoszeń) ---
+// --- KOMENDY NA DISCORDZIE (Kreator Embedów) ---
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
-    if (message.content.startsWith('!ogloszenie') && message.author.id === YOUR_DISCORD_ID) {
-        // Składnia: !ogloszenie Tytuł | Treść
-        const args = message.content.replace('!ogloszenie', '').trim().split('|');
-        const title = args[0] ? args[0].trim() : 'Ogłoszenie';
-        const text = args[1] ? args[1].trim() : 'Brak treści.';
+    if (message.content.startsWith('!embed') && message.author.id === YOUR_DISCORD_ID) {
+        const rawArgs = message.content.replace('!embed', '').trim();
+        
+        if (!rawArgs) {
+            return message.channel.send("Użyj komendy w ten sposób:\n`!embed title=Twój Tytuł | desc=Twój opis | color=#ff0000 | footer=Stopka | author=Autor | image=Link_do_zdjecia | thumbnail=Link_do_miniaturki`\nMożesz używać `\\n` w opisie, żeby zrobić nową linijkę. Czego nie wpiszesz, tego nie będzie.");
+        }
 
-        const embed = new EmbedBuilder()
-            .setColor('#111214')
-            .setAuthor({ name: `📣 RAPLDEZ • ${title.toUpperCase()}` })
-            .setDescription(`\n${text}\n`)
-            .setFooter({ text: 'rapldez OS • Powiadomienie' })
-            .setTimestamp();
+        const parts = rawArgs.split('|');
+        const embedData = {};
 
-        await message.channel.send({ embeds: [embed] });
-        await message.delete().catch(() => null);
+        // Rozbija komendę na klucz i wartość
+        parts.forEach(part => {
+            const index = part.indexOf('=');
+            if (index !== -1) {
+                const key = part.substring(0, index).trim().toLowerCase();
+                const value = part.substring(index + 1).trim();
+                embedData[key] = value;
+            }
+        });
+
+        const embed = new EmbedBuilder();
+        let hasContent = false;
+        
+        if (embedData.title) { embed.setTitle(embedData.title); hasContent = true; }
+        if (embedData.desc) { embed.setDescription(embedData.desc.replace(/\\n/g, '\n')); hasContent = true; }
+        
+        // Zabezpieczenie koloru (musi być format #XXXXXX), jak nie ma to dajemy czarny/mroczny
+        if (embedData.color && /^#[0-9A-F]{6}$/i.test(embedData.color)) {
+            embed.setColor(embedData.color);
+        } else {
+            embed.setColor('#111214'); 
+        }
+
+        if (embedData.footer) embed.setFooter({ text: embedData.footer });
+        if (embedData.author) embed.setAuthor({ name: embedData.author });
+        
+        try {
+            if (embedData.image) embed.setImage(embedData.image);
+            if (embedData.thumbnail) embed.setThumbnail(embedData.thumbnail);
+        } catch (e) {
+            console.log("Problem z załadowaniem grafiki do embeda.");
+        }
+
+        if (!hasContent) {
+            embed.setDescription("Zrobiłeś pusty embed! Musisz wpisać chociaż `title=` albo `desc=`.");
+        }
+
+        try {
+            await message.channel.send({ embeds: [embed] });
+            await message.delete().catch(() => null);
+        } catch (err) {
+            console.log("Błąd wysyłania embeda:", err);
+            message.channel.send("Coś poszło nie tak. Sprawdź, czy na pewno wrzuciłeś poprawne linki do zdjęć.");
+        }
     }
 });
 
@@ -295,7 +333,7 @@ client.on('interactionCreate', async interaction => {
                 await logChannel.send({ embeds: [embedLog], files: [attachment] });
             } else {
                 const adminUser = await client.users.fetch(YOUR_DISCORD_ID);
-                await adminUser.send({ content: `⚠️ Nie skonfigurowano ID kanału logów. Archiwum: **${interaction.channel.name}**`, embeds: [embedLog], files: [attachment] });
+                await adminUser.send({ content: `⚠️ Nie mogłem wysłać na kanał logów. Archiwum: **${interaction.channel.name}**`, embeds: [embedLog], files: [attachment] });
             }
 
         } catch (err) {
