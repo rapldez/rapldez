@@ -169,10 +169,20 @@ app.get('/api/views', async (req, res) => {
     }
 });
 
-// FORMULARZ KONTAKTOWY (ZGŁOSZENIE-X) - POJEDYNCZY ENDPOINT BEZ DUPLIKATÓW
+// Pamięć podręczna do blokowania podwójnych strzałów z formularza
+const recentSubmissions = new Map();
+
+// FORMULARZ KONTAKTOWY (ZABEZPIECZONY PRZED DUPLIKATAMI)
 app.post('/api/kontakt', async (req, res) => {
     const { nick, subject, message } = req.body;
     if (!nick || !message || !subject) return res.status(400).json({ error: 'Brakujące dane' });
+
+    // Blokada powtórzeń w ciągu 5 sekund dla tego samego nicku i treści
+    const subKey = `${nick}_${message}`;
+    if (recentSubmissions.has(subKey) && Date.now() - recentSubmissions.get(subKey) < 5000) {
+        return res.status(200).json({ message: 'Zgłoszenie zostało już wysłane.' });
+    }
+    recentSubmissions.set(subKey, Date.now());
 
     try {
         const guild = client.guilds.cache.get(SERVER_ID);
@@ -507,10 +517,11 @@ client.on('interactionCreate', async interaction => {
     let createdAtStr = parts[1] || formatDatePL(new Date());
 
     if (interaction.customId === 'close_ticket') {
-        if (targetId && targetId !== 'brak_id') await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
-        
         const closedAtStr = formatDatePL(new Date());
         await interaction.channel.setTopic(`${targetId}|${createdAtStr}|${closedAtStr}`).catch(() => null);
+        if (targetId && targetId !== 'brak_id') {
+            await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
+        }
 
         const allChannels = interaction.guild.channels.cache;
         const resolvedCount = allChannels.filter(c => c.name.startsWith('rozwiązany-')).size + 1;
@@ -520,7 +531,9 @@ client.on('interactionCreate', async interaction => {
             new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
         );
-        await interaction.update({ content: `🔒 Zgłoszenie zamknięte i oznaczone jako rozwiązane (${closedAtStr}).`, components: [reopenRow] });
+        
+        await interaction.reply({ content: `🔒 Zgłoszenie zamknięte i oznaczone jako rozwiązane (${closedAtStr}).`, ephemeral: false }).catch(() => null);
+        await interaction.message.edit({ components: [reopenRow] }).catch(() => null);
     }
 
     if (interaction.customId === 'open_ticket') {
@@ -535,7 +548,9 @@ client.on('interactionCreate', async interaction => {
             new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
         );
-        await interaction.update({ content: `🔓 Zgłoszenie zostało ponownie otwarte.`, components: [closeRow] });
+        
+        await interaction.reply({ content: `🔓 Zgłoszenie zostało ponownie otwarte.`, ephemeral: false }).catch(() => null);
+        await interaction.message.edit({ components: [closeRow] }).catch(() => null);
     }
 
     if (interaction.customId === 'archive_ticket') {
