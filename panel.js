@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
 
-// Tutaj możemy w przyszłości zbierać ostatnie logi z bota do wyświetlenia na stronie
-let liveLogs = ['[SYSTEM] Panel administracyjny uruchomiony pomyślnie.'];
+// Tablica na logi z bota
+let liveLogs = ['[SYSTEM] Panel administracyjny oraz terminal uruchomione pomyślnie.'];
 
-// Funkcja pomocnicza do dopisywania logów (możemy ją wywoływać z bot.js)
+// Funkcja do dopisywania logów z bota (możesz ją importować lub wywoływać w bot.js)
 router.addLog = function(text) {
     liveLogs.unshift(`[${new Date().toLocaleTimeString()}] ${text}`);
-    if (liveLogs.length > 50) liveLogs.pop(); // Trzymamy maksymalnie 50 ostatnich wpisów
+    if (liveLogs.length > 100) liveLogs.pop(); // Trzymamy do 100 ostatnich wpisów
 };
 
 router.get('/panel', (req, res) => {
@@ -35,7 +35,7 @@ router.get('/panel', (req, res) => {
                 
                 .grid {
                     display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
                     gap: 20px;
                     max-width: 1100px;
                     margin: 0 auto;
@@ -49,24 +49,30 @@ router.get('/panel', (req, res) => {
                 }
                 .card h3 { margin-top: 0; color: #dbdee1; border-bottom: 1px solid #282828; padding-bottom: 10px; }
                 
-                /* Styl terminala */
+                /* Terminal */
+                .terminal-container {
+                    grid-column: 1 / -1;
+                }
                 .terminal {
                     background: #000000;
                     border: 1px solid #222;
                     border-radius: 6px;
-                    padding: 12px;
-                    height: 180px;
+                    padding: 15px;
+                    height: 250px;
                     overflow-y: auto;
                     font-family: 'Courier New', Courier, monospace;
-                    font-size: 12px;
+                    font-size: 13px;
                     color: #00ff66;
-                    line-height: 1.4;
+                    line-height: 1.5;
+                }
+                .terminal div {
+                    margin-bottom: 4px;
                 }
                 
                 .status-item {
                     display: flex;
                     justify-content: space-between;
-                    margin: 10px 0;
+                    margin: 12px 0;
                     font-size: 14px;
                 }
                 .badge-on { color: #23a55a; font-weight: bold; }
@@ -84,14 +90,12 @@ router.get('/panel', (req, res) => {
                     transition: background 0.2s;
                 }
                 .btn:hover { background: #4752C4; }
-                .btn-danger { background: #da373c; }
-                .btn-danger:hover { background: #a1282c; }
             </style>
         </head>
         <body>
             <header>
                 <h1>Centrum Dowodzenia</h1>
-                <div class="subtitle">Panel zarządzania botem i bezpieczeństwem serwera</div>
+                <div class="subtitle">Zarządzanie botem i podgląd systemu na żywo</div>
             </header>
             
             <div class="grid">
@@ -101,24 +105,30 @@ router.get('/panel', (req, res) => {
                     <div class="status-item"><span>Stan Bota:</span> <span class="badge-on">🟢 Online</span></div>
                     <div class="status-item"><span>Anty-Phishing:</span> <span class="badge-on">🛡️ Aktywny</span></div>
                     <div class="status-item"><span>Ghost Pingi:</span> <span class="badge-on">👻 Aktywne</span></div>
-                    <div class="status-item"><span>Baza MongoDB:</span> <span class="badge-on">🔗 Połączono</span></div>
+                    <div class="status-item"><span>Panel WWW:</span> <span class="badge-on">🌐 Działa</span></div>
                 </div>
 
                 <!-- Szybkie akcje -->
                 <div class="card">
                     <h3>Szybkie Akcje</h3>
                     <button class="btn" onclick="alert('Wysyłam testowe powiadomienie...')">Wyślij test logu</button>
-                    <button class="btn btn-danger" onclick="alert('Funkcja Awaryjna - wkrótce!')">Przycisk Awaryjny (Nuke)</button>
+                    <button class="btn" onclick="location.reload()">Odśwież Panel</button>
                 </div>
 
-                <!-- Terminal / Logi na żywo -->
-                <div class="card" style="grid-column: 1 / -1;">
-                    <h3>Terminal / Ostatnie Zdarzenia</h3>
+                <!-- Terminal przeniesiony na pełną szerokość -->
+                <div class="card terminal-container">
+                    <h3>Terminal / Logi Serwera na Żywo</h3>
                     <div class="terminal" id="terminal-box">
                         ${liveLogs.map(log => `<div>${log}</div>`).join('')}
                     </div>
                 </div>
             </div>
+
+            <script>
+                // Automatyczne przewijanie terminala na sam dół przy załadowaniu
+                const term = document.getElementById('terminal-box');
+                term.scrollTop = term.scrollHeight;
+            </script>
         </body>
         </html>
     `);
