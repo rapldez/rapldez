@@ -71,7 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
             else if(weatherCode <= 67) icon = 'fa-cloud-rain';
             else if(weatherCode <= 77) icon = 'fa-snowflake';
             else if(weatherCode >= 95) icon = 'fa-bolt';
-            document.getElementById('weather-szczecin').innerHTML = `<i class="fa-solid ${icon}"></i> ${temp}°C`;
+            const weatherWidget = document.getElementById('weather-szczecin');
+            if(weatherWidget) weatherWidget.innerHTML = `<i class="fa-solid ${icon}"></i> ${temp}°C`;
         }).catch(err => {});
     }
     fetchWeather();
@@ -99,10 +100,13 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(data => {
             const statusText = document.getElementById('auth-status-text');
             const actionContainer = document.getElementById('auth-action-container');
+            const embedBtn = document.getElementById('open-embed-btn');
+            
             if (data.authenticated) {
                 isAdminLogged = true;
                 if (statusText) statusText.innerHTML = `<span style="color:#23a559;">Zalogowano: ${data.username}</span>`;
                 if (actionContainer) actionContainer.innerHTML = `<button id="logout-btn" style="background:#f23f42; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:11px;">Wyloguj</button>`;
+                if (embedBtn) embedBtn.style.display = 'inline-flex'; // Pokazuj przycisk Kreatora Embedów dla roota
                 
                 document.getElementById('logout-btn')?.addEventListener('click', () => {
                     fetch('/api/logout', { method: 'POST' }).then(() => {
@@ -113,8 +117,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 isAdminLogged = false;
                 if (statusText) statusText.innerText = "Tryb gościa";
-                // Mały przycisk "Admin" zamiast wielkiego logo
                 if (actionContainer) actionContainer.innerHTML = `<a href="/auth/discord" class="admin-btn">Admin</a>`;
+                if (embedBtn) embedBtn.style.display = 'none';
             }
         }).catch(err => {});
     }
@@ -201,9 +205,12 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(res => res.json())
         .then(data => {
             if (data && data.guild) {
-                document.getElementById('discord-server-name').innerText = data.guild.name;
-                document.getElementById('discord-server-stats').innerHTML = `<span class="stats-dot"></span> ${data.approximate_presence_count} Online`;
-                if (data.guild.icon) document.getElementById('discord-server-icon').src = `https://cdn.discordapp.com/icons/${data.guild.id}/${data.guild.icon}.png`;
+                const sName = document.getElementById('discord-server-name');
+                const sStats = document.getElementById('discord-server-stats');
+                const sIcon = document.getElementById('discord-server-icon');
+                if(sName) sName.innerText = data.guild.name;
+                if(sStats) sStats.innerHTML = `<span class="stats-dot"></span> ${data.approximate_presence_count} Online`;
+                if (data.guild.icon && sIcon) sIcon.src = `https://cdn.discordapp.com/icons/${data.guild.id}/${data.guild.icon}.png`;
             }
         }).catch(err => {});
 
@@ -346,8 +353,23 @@ document.addEventListener('DOMContentLoaded', () => {
                         termOutput.innerHTML = '';
                         return;
                     default:
-                        response.innerHTML = `bash: ${command}: nieznane polecenie. Wpisz 'pomoc'.`;
-                        break;
+                        // Obsługa wbudowanych poleceń systemowych backendu (sysinfo, db stats, search)
+                        fetch('/api/terminal', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ command: command })
+                        }).then(res => res.json()).then(data => {
+                            response.innerHTML = (data.output || data.error || 'Brak odpowiedzi.').replace(/\n/g, '<br>');
+                            response.style.marginBottom = "10px";
+                            termOutput.appendChild(response);
+                            termOutput.scrollTop = termOutput.scrollHeight;
+                        }).catch(() => {
+                            response.innerHTML = `bash: ${command}: nieznane polecenie. Wpisz 'pomoc'.`;
+                            response.style.marginBottom = "10px";
+                            termOutput.appendChild(response);
+                            termOutput.scrollTop = termOutput.scrollHeight;
+                        });
+                        return;
                 }
                 response.style.marginBottom = "10px";
                 termOutput.appendChild(response);
