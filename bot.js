@@ -1412,4 +1412,44 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
+// --- SYSTEM: AUTO-BLOKADA PODEJRZANYCH DOMEN (ANTY-PHISHING) ---
+// Lista domen, które chcesz całkowicie blokować na serwerie
+const BLOCKED_DOMAINS = [
+    'steam-gift.com', 
+    'discord-nitro.ru', 
+    'free-nitros.link',
+    'nitro-discord.gg'
+    // Możesz dopisywać kolejne podejrzane adresy w cudzysłowach po przecinku
+];
+
+client.on('messageCreate', async message => {
+    // Ignorujemy wiadomości od botów i wiadomości prywatne (DM)
+    if (message.author.bot || !message.guild) return;
+
+    const contentLower = message.content.toLowerCase();
+    
+    // Sprawdzamy, czy wiadomość zawiera którąś z zablokowanych domen
+    const isSuspicious = BLOCKED_DOMAINS.some(domain => contentLower.includes(domain));
+
+    if (isSuspicious) {
+        try {
+            // 1. Kasujemy wiadomość z podejrzanym linkiem
+            await message.delete();
+
+            // 2. Wysyłamy ostrzeżenie na kanale
+            const warningMsg = await message.channel.send(`⚠️ ${message.author}, Twoja wiadomość została usunięta, ponieważ zawierała potencjalnie niebezpieczną lub zablokowaną domenę!`);
+            
+            // Usuwamy ostrzeżenie po 5 sekundach, żeby nie śmiecić na czacie
+            setTimeout(() => warningMsg.delete().catch(() => {}), 5000);
+
+            // 3. (Opcjonalnie) Możesz też wysłać log do swojego kanału administracyjnego
+            // console.log(`[ANTY-PHISHING] Zablokowano link od ${message.author.tag}: ${message.content}`);
+
+        } catch (error) {
+            console.error('Błąd podczas usuwania podejrzanego linku:', error);
+        }
+    }
+});
+
+
 client.login(BOT_TOKEN);
