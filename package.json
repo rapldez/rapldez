@@ -1,7 +1,7 @@
 {
-  "name": "rapldez-bot-site",
+  "name": "rapldez_Bot",
   "version": "1.0.0",
-  "description": "Strona i bot Discord",
+  "description": "Bot created by rapldez",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
@@ -9,6 +9,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "discord.js": "^14.14.1",
-    "express": "^4.19.2"
+    "express": "^4.18.2",
+    "mongoose": "^8.0.0"
   }
 }
