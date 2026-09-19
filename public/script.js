@@ -242,8 +242,9 @@ document.addEventListener('DOMContentLoaded', () => {
             termOverlay.style.pointerEvents = 'none';
         });
 
+        // POPRAWIONE KLUCZOWE NASŁUCHIWANIE ENTERA W TERMINALU
         termInput.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' || e.keyCode === 13) {
                 e.preventDefault();
                 const command = this.value.trim().toLowerCase();
                 this.value = '';
@@ -273,8 +274,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             RAM: 16GB DDR4<br>
                             Monitor: 144Hz IPS<br><br>
                             <span style="color:#23a559;">[ Sprzęt Rowerowy ]</span><br>
-                            Szosa: Model XYZ<br>
-                            Gravel: Model ABC
+                            Szosa: Szosówka śmigająca po szosie<br>
+                            Gravel: Gravel na bezdroża
                         `;
                         break;
                     case 'ping':
@@ -315,12 +316,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ŚMIESZNE I ZAJEBISTE TEKSTY POD KAFELKAMI SKILLS (LUA, NODE.JS, PYTHON, SQL)
     const skillTags = document.querySelectorAll('.skill-tag');
     const codeSnippets = {
-        'Lua': `addCommandHandler("kawa", function(plr)<br>&nbsp;&nbsp;local sanity = getElementData(plr, "sanity") or 100<br>&nbsp;&nbsp;if sanity < 10 then<br>&nbsp;&nbsp;&nbsp;&nbsp;outputChatBox("#ff0000[Błąd] Skrypt ledwo dyszy. Ratuj się kto może!", plr, 255, 255, 255, true)<br>&nbsp;&nbsp;else<br>&nbsp;&nbsp;&nbsp;&nbsp;outputChatBox("#23a559[Info] MTA to stan umysłu. Kod działa... chyba.", plr, 255, 255, 255, true)<br>&nbsp;&nbsp;end<br>end)`,
-        'Node.js': `app.get("/api/rapldez", (req, res) => {<br>&nbsp;&nbsp;if (req.query.energy === "0") {<br>&nbsp;&nbsp;&nbsp;&nbsp;return res.status(503).json({ error: "Developer wyłączony. Wymagana drzemka." });<br>&nbsp;&nbsp;}<br>&nbsp;&nbsp;res.json({ <br>&nbsp;&nbsp;&nbsp;&nbsp;status: "Sigma", <br>&nbsp;&nbsp;&nbsp;&nbsp;lookingForTeam: true, <br>&nbsp;&nbsp;&nbsp;&nbsp;hoursSlept: 2 <br>&nbsp;&nbsp;});<br>});`,
-        'Python': `def write_code():<br>&nbsp;&nbsp;try:<br>&nbsp;&nbsp;&nbsp;&nbsp;import antigravity<br>&nbsp;&nbsp;&nbsp;&nbsp;print("Znowu zapomniałem jak się robi pętle w Pythonie...")<br>&nbsp;&nbsp;except Exception as e:<br>&nbsp;&nbsp;&nbsp;&nbsp;print(f"Stack Overflow pomóż: {e}")<br><br>write_code()`,
-        'SQL': `-- Próba odzyskania danych o serwerze...<br>SELECT id, username, brain_cells FROM developers WHERE username = 'rapldez';<br><span style="color:#f23f42;">> Zwrócono 0 wierszy.</span><br><br>UPDATE server_economy SET money = money * 0 WHERE admin = 'rapldez';<br><span style="color:#23a559;">> Ups... Wykonano pomyślnie.</span>`
+        'Lua': `🔥 [MTA Scripting Engine]<br>addCommandHandler("slaba_forma", function(plr)<br>&nbsp;&nbsp;outputChatBox("#ff3333[ERROR] Brak paliwa w żyłach! Wymagana kawa.", plr, 255, 255, 255, true)<br>end)<br><span style="color:#23a559;">> Status: Wjeżdża bokiem na każdym serwerze RPG!</span>`,
+        'Node.js': `⚡ [Backend Wizardry]<br>app.get("/api/sigma", (req, res) => {<br>&nbsp;&nbsp;res.json({ vibe: "Nie do pobicia", coffeeLevel: "100%" });<br>);<br><span style="color:#66bb6a;">> Status: Strona i bot żyją w symbiozie 24/7 na Renderze!</span>`,
+        'Python': `🐍 [The Almighty Script]<br>try:<br>&nbsp;&nbsp;import coffee_machine<br>&nbsp;&nbsp;coffee_machine.brew_fresh()<br>except Exception:<br>&nbsp;&nbsp;print("Panic! Znowu brak kofeiny w ekspresie.")<br><span style="color:#ffee58;">> Status: Automatyzuje nudne rzeczy, żeby Radek mógł jeździć na szosie!</span>`,
+        'SQL': `🛢️ [Database Destroyer]<br>SELECT * FROM brain_cells WHERE status = 'missing_at_3am';<br><span style="color:#f23f42;">> Warning: Wykryto zerową aktywność szarych komórek po północy!</span><br><span style="color:#ffa726;">> Status: Tabela ticketerów rośnie szybciej niż km na gravelu.</span>`
     };
 
     skillTags.forEach(tag => {
@@ -331,7 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 setTimeout(() => {
                     const cmdEcho = document.createElement('div');
-                    cmdEcho.innerHTML = `<span class="prompt">root@rapldez:</span> <span style="color:white;">cat ${lang.toLowerCase()}_script</span>`;
+                    cmdEcho.innerHTML = `<span class="prompt">root@rapldez:</span> <span style="color:white;">cat skill_${lang.toLowerCase()}.sh</span>`;
                     termOutput.appendChild(cmdEcho);
 
                     const response = document.createElement('div');
