@@ -85,6 +85,9 @@ const Paste = mongoose.model('Paste', pasteSchema);
 const warnSchema = new mongoose.Schema({ userId: String, reason: String, adminId: String, date: String });
 const Warn = mongoose.model('Warn', warnSchema);
 
+const embedPresetSchema = new mongoose.Schema({ name: String, content: String, authorName: String, authorUrl: String, authorIcon: String, title: String, description: String, color: String, image: String, thumbnail: String, footer: String, footerIcon: String, timestamp: Boolean, buttons: Array });
+const EmbedPreset = mongoose.model('EmbedPreset', embedPresetSchema);
+
 let dbStatus = 'Rozłączono';
 if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
@@ -163,6 +166,17 @@ app.get('/api/views', async (req, res) => {
     } catch (err) {
         res.status(500).json({ views: 'Live' });
     }
+});
+
+// Szablony Embedów API
+app.get('/api/embed-presets', async (req, res) => {
+    try { const presets = await EmbedPreset.find({}, 'name'); res.json(presets); } catch(e) { res.json([]); }
+});
+app.get('/api/embed-presets/:id', async (req, res) => {
+    try { const p = await EmbedPreset.findById(req.params.id); res.json(p); } catch(e) { res.status(404).json({}); }
+});
+app.post('/api/embed-presets', async (req, res) => {
+    try { await EmbedPreset.create(req.body); res.json({ success: true }); } catch(e) { res.status(500).json({ success: false }); }
 });
 
 const recentSubmissions = new Map();
@@ -265,7 +279,7 @@ app.post('/api/terminal', async (req, res) => {
     return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo]` });
 });
 
-// ENDPOINT WYSYŁANIA EMBEDÓW Z PRZYCISKAMI
+// ENDPOINT WYSYŁANIA EMBEDÓW Z PRZYCISKAMI I LOGOWANIEM
 app.post('/api/send-embed', async (req, res) => {
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ error: 'Brak uprawnień roota.' });
     
@@ -324,7 +338,7 @@ app.post('/api/send-embed', async (req, res) => {
         }
 
         await targetChannel.send(payload);
-        logToTerminalDiscord('📝 Zaawansowany Kreator z Przyciskami', `Wysłano wiadomość na kanał <#${channelId}>.`);
+        logToTerminalDiscord('📝 Kreator Embedów', `Użytkownik **${req.session.user.username}** wysłał embed z przyciskami na kanał <#${channelId}>.`);
         res.json({ success: true, message: 'Wiadomość z embedem i przyciskami wysłana!' });
     } catch (err) {
         console.error(err);
