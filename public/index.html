@@ -20,7 +20,7 @@
         .admin-btn:hover { background: #5865F2; color: #fff; border-color: transparent; }
 
         /* Poprawka warstw formularza kontaktowego */
-        #contact-overlay {
+        #contact-overlay, #embed-builder-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.7);
@@ -65,7 +65,13 @@
             </div>
             <div id="auth-bar" class="auth-bar">
                 <span id="auth-status-text">Sprawdzanie uprawnień...</span>
-                <div id="auth-action-container"></div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <!-- DODANY PRZYCISK KREATORA EMBEDÓW (Ukryty, pomniejszony) -->
+                    <button class="admin-btn" id="open-embed-btn" style="display: none; background: #024442; border-color: #024442; color: #fff; font-size: 11px; padding: 3px 8px; cursor: pointer;" onclick="openEmbedBuilder()">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Kreator
+                    </button>
+                    <div id="auth-action-container"></div>
+                </div>
             </div>
             <div class="terminal-body" id="terminal-output"></div>
             <form id="terminal-form" class="terminal-input-line" style="margin: 0; display: flex;">
@@ -75,6 +81,7 @@
         </div>
     </div>
 
+    <!-- ISTNIEJĄCY FORMULARZ KONTAKTOWY -->
     <div id="contact-overlay">
         <div class="contact-window">
             <div class="contact-header" style="display:flex; justify-content:space-between; margin-bottom:15px; color:#fff; font-weight:bold;">
@@ -87,6 +94,24 @@
                 <textarea id="contact-message" placeholder="Treść wiadomości..." rows="4" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none; resize:none;" required></textarea>
                 <button id="send-contact-btn" style="background:#5865F2; color:#fff; border:none; padding:10px; border-radius:6px; font-weight:bold; cursor:pointer;">Wyślij zgłoszenie</button>
                 <div class="contact-disclaimer" style="font-size:11px; color:#949ba4; text-align:center;">Wiadomość trafia bezpośrednio na mój serwer Discord.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DODANE OKNO KREATORA EMBEDÓW -->
+    <div id="embed-builder-overlay">
+        <div class="contact-window">
+            <div class="contact-header" style="display:flex; justify-content:space-between; margin-bottom:15px; color:#fff; font-weight:bold;">
+                <span>Kreator Embedów na żywo</span>
+                <i class="fa-solid fa-xmark" onclick="closeEmbedBuilder()" style="cursor:pointer;"></i>
+            </div>
+            <div class="contact-body" style="display:flex; flex-direction:column; gap:10px;">
+                <input type="text" id="embed-channel" placeholder="ID Kanału Discord (wymagane)" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none;" required>
+                <input type="text" id="embed-title" placeholder="Tytuł Embedu (opcjonalnie)" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none;">
+                <textarea id="embed-desc" placeholder="Treść / Opis (wymagane, używaj \n dla nowej linii)" rows="4" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none; resize:none;" required></textarea>
+                <input type="text" id="embed-footer" placeholder="Stopka (opcjonalnie)" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none;">
+                <button id="send-builder-btn" onclick="sendEmbed()" style="background:#024442; color:#fff; border:none; padding:10px; border-radius:6px; font-weight:bold; cursor:pointer; transition: 0.2s;">Wyślij na Serwer</button>
+                <div id="embed-status" style="font-size:12px; color:#23a559; text-align:center; height:18px;"></div>
             </div>
         </div>
     </div>
@@ -190,6 +215,72 @@
     </div>
 
     <div id="toast-container" class="toast-container"></div>
+
+    <!-- DODANE SKRYPTY OBSŁUGUJĄCE KREATOR EMBEDÓW -->
+    <script>
+        function openEmbedBuilder() {
+            document.getElementById('embed-builder-overlay').style.opacity = '1';
+            document.getElementById('embed-builder-overlay').style.pointerEvents = 'auto';
+        }
+
+        function closeEmbedBuilder() {
+            document.getElementById('embed-builder-overlay').style.opacity = '0';
+            document.getElementById('embed-builder-overlay').style.pointerEvents = 'none';
+        }
+
+        async function sendEmbed() {
+            const channelId = document.getElementById('embed-channel').value.trim();
+            const title = document.getElementById('embed-title').value.trim();
+            const desc = document.getElementById('embed-desc').value.trim();
+            const footer = document.getElementById('embed-footer').value.trim();
+            const status = document.getElementById('embed-status');
+            
+            if (!channelId || !desc) {
+                status.style.color = '#f23f42';
+                status.innerText = 'Podaj ID kanału i treść!';
+                return;
+            }
+
+            status.innerText = 'Wysyłanie...';
+            status.style.color = '#23a559';
+            
+            try {
+                const res = await fetch('/api/send-embed', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channelId, title, description: desc, footer })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    status.innerText = '✅ Wysłano na serwer!';
+                    setTimeout(() => {
+                        closeEmbedBuilder();
+                        status.innerText = '';
+                        document.getElementById('embed-desc').value = '';
+                        document.getElementById('embed-title').value = '';
+                    }, 1500);
+                } else {
+                    status.style.color = '#f23f42';
+                    status.innerText = data.error || 'Wystąpił błąd.';
+                }
+            } catch (e) {
+                status.style.color = '#f23f42';
+                status.innerText = 'Błąd z backendem.';
+            }
+        }
+
+        // Sprawdzanie uprawnień i odkrywanie przycisku "Kreator"
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const res = await fetch('/api/check-auth');
+                const data = await res.json();
+                if (data.authenticated) {
+                    document.getElementById('open-embed-btn').style.display = 'inline-flex';
+                }
+            } catch (e) {}
+        });
+    </script>
+
     <script src="script.js"></script>
 </body>
 </html>
