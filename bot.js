@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, AuditLogEvent } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -76,6 +76,10 @@ const TicketArchive = mongoose.model('TicketArchive', ticketArchiveSchema);
 const pasteSchema = new mongoose.Schema({ shortId: String, content: String, createdAt: String });
 const Paste = mongoose.model('Paste', pasteSchema);
 
+// NOWOŚĆ: Baza ostrzeżeń (Warns)
+const warnSchema = new mongoose.Schema({ userId: String, reason: String, adminId: String, date: String });
+const Warn = mongoose.model('Warn', warnSchema);
+
 if (MONGO_URI) mongoose.connect(MONGO_URI).then(() => console.log('✅ Połączono z MongoDB!')).catch(err => console.error(err));
 
 const client = new Client({ 
@@ -139,7 +143,7 @@ app.get('/auth/discord/callback', async (req, res) => {
 app.get('/api/check-auth', (req, res) => res.json({ authenticated: (req.session?.user?.id === YOUR_DISCORD_ID), username: req.session?.user?.username }));
 app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({ success: true })));
 
-// --- API STRONY & TERMINAL ---
+// --- API STRONY WWW (TERMINAL & EMBED BUILDER) ---
 app.post('/api/terminal', async (req, res) => {
     const cmd = req.body.command ? req.body.command.trim() : '';
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ output: 'Odmowa dostępu.' });
@@ -167,7 +171,6 @@ app.post('/api/terminal', async (req, res) => {
         return res.json({ output: `Status zmieniony na: "${cmd.substring(11)}"` });
     }
 
-    // NOWOŚĆ: Przeszukiwanie bazy ticketów
     if (cmdLower === 'search' && cmdArgs.length > 1) {
         const query = cmdArgs.slice(1).join(' ');
         const results = await TicketArchive.find({ htmlContent: { $regex: query, $options: 'i' } });
@@ -177,6 +180,33 @@ app.post('/api/terminal', async (req, res) => {
     }
 
     return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo]` });
+});
+
+// NOWOŚĆ: Odbieranie żądania z Kreatora Embedów na stronie WWW
+app.post('/api/send-embed', async (req, res) => {
+    if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ error: 'Brak uprawnień roota.' });
+    
+    const { channelId, title, description, color, footer } = req.body;
+    
+    if (!channelId || !description) return res.status(400).json({ error: 'Wymagane ID kanału oraz opis.' });
+
+    try {
+        const targetChannel = client.channels.cache.get(channelId);
+        if (!targetChannel) return res.status(404).json({ error: 'Nie znaleziono kanału o tym ID (lub bot go nie widzi).' });
+
+        const embed = new EmbedBuilder()
+            .setColor(color || MAIN_COLOR)
+            .setDescription(description.replace(/\\n/g, '\n'));
+            
+        if (title) embed.setTitle(title);
+        if (footer) embed.setFooter({ text: footer });
+
+        await targetChannel.send({ embeds: [embed] });
+        logToTerminalDiscord('📝 Zdalny Kreator Embedów', `Wysłano nową wiadomość na kanał <#${channelId}>.`);
+        res.json({ success: true, message: 'Embed został wysłany!' });
+    } catch (err) {
+        res.status(500).json({ error: 'Błąd podczas wysyłania embeda.' });
+    }
 });
 
 app.get('/p/:id', async (req, res) => {
@@ -203,14 +233,66 @@ client.on('messageCreate', async message => {
         }
     }
 
+    // --- SYSTEM MODERACJI ---
+    
+    // !warn
     if (message.content.startsWith('!warn') && message.member.permissions.has(PermissionsBitField.Flags.KickMembers)) {
         const args = message.content.split(' ');
         const targetUser = message.mentions.users.first();
-        const reason = args.slice(2).join(' ') || 'Brak powódu';
+        const reason = args.slice(2).join(' ') || 'Brak powodu';
         if (!targetUser) return message.reply('Oznacz użytkownika, np. `!warn @user spam`');
+        
+        await Warn.create({ userId: targetUser.id, reason: reason, adminId: message.author.id, date: new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) });
         
         message.channel.send({ embeds: [createLogEmbed('⚠️ OSTRZEŻENIE', `Użytkownik <@${targetUser.id}> otrzymał ostrzeżenie.\n**Powód:** ${reason}`)] });
         sendServerLog('⚠️ Nadano ostrzeżenie', `**Admin:** <@${message.author.id}>\n**Ukarany:** <@${targetUser.id}>\n**Powód:** ${reason}`);
+    }
+
+    // !kick
+    if (message.content.startsWith('!kick') && message.member.permissions.has(PermissionsBitField.Flags.KickMembers)) {
+        const args = message.content.split(' ');
+        const targetMember = message.mentions.members.first();
+        const reason = args.slice(2).join(' ') || 'Brak powodu';
+        if (!targetMember) return message.reply('Oznacz użytkownika: `!kick @user powód`');
+        if (!targetMember.kickable) return message.reply('Nie mogę wyrzucić tego użytkownika (ma wyższą rolę).');
+
+        await targetMember.kick(reason).catch(() => null);
+        message.channel.send({ embeds: [createLogEmbed('👢 WYRZUCENIE', `<@${targetMember.id}> został wyrzucony z serwera.\n**Powód:** ${reason}`)] });
+        sendServerLog('👢 Wyrzucenie z serwera (Kick)', `**Admin:** <@${message.author.id}>\n**Ukarany:** <@${targetMember.id}>\n**Powód:** ${reason}`);
+    }
+
+    // !ban
+    if (message.content.startsWith('!ban') && message.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+        const args = message.content.split(' ');
+        const targetMember = message.mentions.members.first();
+        const reason = args.slice(2).join(' ') || 'Brak powodu';
+        if (!targetMember) return message.reply('Oznacz użytkownika: `!ban @user powód`');
+        if (!targetMember.bannable) return message.reply('Nie mogę zbanować tego użytkownika.');
+
+        await targetMember.ban({ reason }).catch(() => null);
+        message.channel.send({ embeds: [createLogEmbed('🔨 BAN', `<@${targetMember.id}> został zbanowany na zawsze.\n**Powód:** ${reason}`)] });
+    }
+
+    // !userinfo (Zaciąga dane z bazy o warnach)
+    if (message.content.startsWith('!userinfo')) {
+        const targetMember = message.mentions.members.first() || message.member;
+        const warnCount = await Warn.countDocuments({ userId: targetMember.id });
+        const roles = targetMember.roles.cache.filter(r => r.id !== message.guild.id).map(r => `<@&${r.id}>`).join(', ') || 'Brak ról';
+        
+        const embed = new EmbedBuilder()
+            .setColor(MAIN_COLOR)
+            .setAuthor({ name: `Informacje o użytkowniku: ${targetMember.user.tag}`, iconURL: targetMember.user.displayAvatarURL() })
+            .addFields(
+                { name: '📅 Dołączył na serwer', value: `<t:${Math.floor(targetMember.joinedTimestamp / 1000)}:R>`, inline: true },
+                { name: '📝 Konto utworzone', value: `<t:${Math.floor(targetMember.user.createdTimestamp / 1000)}:R>`, inline: true },
+                { name: '⚠️ Ilość ostrzeżeń', value: `\`${warnCount}\``, inline: true },
+                { name: '🏷️ Posiadane role', value: roles, inline: false }
+            )
+            .setThumbnail(targetMember.user.displayAvatarURL({ dynamic: true, size: 256 }))
+            .setFooter({ text: `ID: ${targetMember.id}` })
+            .setTimestamp();
+            
+        await message.channel.send({ embeds: [embed] });
     }
 
     if (message.content.startsWith('!clone-role') && message.author.id === YOUR_DISCORD_ID) {
@@ -227,57 +309,24 @@ client.on('messageCreate', async message => {
         } catch (err) { message.reply('Błąd podczas klonowania.'); }
     }
 
-    // NOWOŚĆ: Generator weryfikacji
     if (message.content.startsWith('!setup-verify') && message.author.id === YOUR_DISCORD_ID) {
         const role = message.mentions.roles.first();
         if (!role) return message.reply('Musisz oznaczyć rolę, którą bot ma nadać, np. `!setup-verify @Użytkownik`');
-
         await message.delete().catch(()=>null);
-        
-        const embed = new EmbedBuilder()
-            .setColor(MAIN_COLOR)
-            .setTitle('✅ Weryfikacja konta')
-            .setDescription('Witamy na serwerze! Aby uzyskać pełny dostęp do kanałów, musisz potwierdzić, że zapoznałes się z regulaminem.\n\nKliknij przycisk poniżej, aby otrzymać rolę i odblokować serwer.')
-            .setFooter({ text: 'rapldez OS • Automatyczny system bezpieczeństwa' });
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`verify_role_${role.id}`)
-                .setLabel('Zweryfikuj się')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('🛡️')
-        );
-
+        const embed = new EmbedBuilder().setColor(MAIN_COLOR).setTitle('✅ Weryfikacja konta').setDescription('Witamy na serwerze! Aby uzyskać pełny dostęp do kanałów, musisz potwierdzić, że zapoznałeś się z regulaminem.\n\nKliknij przycisk poniżej, aby odblokować serwer.').setFooter({ text: 'rapldez OS • System bezpieczeństwa' });
+        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`verify_role_${role.id}`).setLabel('Zweryfikuj się').setStyle(ButtonStyle.Success).setEmoji('🛡️'));
         await message.channel.send({ embeds: [embed], components: [row] });
     }
 
     if (message.content === '!backup' && message.author.id === YOUR_DISCORD_ID) {
-        const data = JSON.stringify({ statystyki: await Counter.find(), archiwum_ticketow: await TicketArchive.find() }, null, 2);
+        const data = JSON.stringify({ statystyki: await Counter.find(), archiwum_ticketow: await TicketArchive.find(), warny: await Warn.find() }, null, 2);
         await message.reply({ content: '📦 **Backup:**', files: [new AttachmentBuilder(Buffer.from(data, 'utf-8'), { name: `backup_${Date.now()}.json` })] });
-    }
-
-    if (message.content.startsWith('!embed') && message.author.id === YOUR_DISCORD_ID) {
-        const rawArgs = message.content.replace('!embed', '').trim();
-        if (!rawArgs) return;
-        const parts = rawArgs.split('|');
-        const embedData = {};
-        parts.forEach(part => {
-            const index = part.indexOf('=');
-            if (index !== -1) embedData[part.substring(0, index).trim().toLowerCase()] = part.substring(index + 1).trim();
-        });
-        const embed = new EmbedBuilder().setColor(MAIN_COLOR);
-        if (embedData.title) embed.setTitle(embedData.title);
-        if (embedData.desc) embed.setDescription(embedData.desc.replace(/\\n/g, '\n'));
-        if (embedData.footer) embed.setFooter({ text: embedData.footer });
-        await message.channel.send({ embeds: [embed] });
-        await message.delete().catch(() => null);
     }
 });
 
 // ==========================================
 // PEŁNY SYSTEM LOGÓW
 // ==========================================
-
 client.on('messageDelete', message => {
     if (message.author?.bot) return;
     sendServerLog('🗑️ Usunięcie wiadomości', `**Autor:** <@${message.author?.id}>\n**Kanał:** <#${message.channel.id}>\n**Treść:**\n\`\`\`text\n${message.content || '[Brak tekstu / Plik]'}\n\`\`\``);
@@ -332,23 +381,18 @@ client.once('ready', async () => {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
-    // NOWOŚĆ: Obsługa weryfikacji z przycisku
     if (interaction.customId.startsWith('verify_role_')) {
         const roleId = interaction.customId.split('verify_role_')[1];
         const role = interaction.guild.roles.cache.get(roleId);
-        
         if (!role) return interaction.reply({ content: '❌ Błąd: Rola weryfikacyjna już nie istnieje.', ephemeral: true });
-        
-        if (interaction.member.roles.cache.has(roleId)) {
-            return interaction.reply({ content: 'Jesteś już zweryfikowany!', ephemeral: true });
-        }
+        if (interaction.member.roles.cache.has(roleId)) return interaction.reply({ content: 'Jesteś już zweryfikowany!', ephemeral: true });
 
         try {
             await interaction.member.roles.add(role);
             await interaction.reply({ content: '✅ Zostałeś pomyślnie zweryfikowany! Uzyskałeś dostęp do serwera.', ephemeral: true });
             sendServerLog('🛡️ Pomyślna Weryfikacja', `Użytkownik <@${interaction.user.id}> zweryfikował się przez system i otrzymał rolę <@&${roleId}>.`);
         } catch (err) {
-            await interaction.reply({ content: '❌ Błąd: Bot nie ma uprawnień, aby nadać Ci tę rolę (Rola bota musi być wyżej na liście ról niż ta rola).', ephemeral: true });
+            await interaction.reply({ content: '❌ Błąd uprawnień bota przy nadawaniu roli.', ephemeral: true });
         }
         return;
     }
