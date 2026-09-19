@@ -258,12 +258,13 @@ client.on('interactionCreate', async interaction => {
     let targetId = 'brak_id';
     let createdAtStr = 'Nieznana';
 
-    if (topic.includes('CREATED:')) {
-        const parts = topic.split('|');
-        targetId = parts[0];
-        createdAtStr = parts[1].replace('CREATED:', '');
-    } else {
-        targetId = topic;
+    // Bezpieczne rozdzielanie danych z topicu
+    const parts = topic.split('|');
+    targetId = parts[0] || 'brak_id';
+    
+    const createdPart = parts.find(p => p && p.startsWith('CREATED:'));
+    if (createdPart) {
+        createdAtStr = createdPart.replace('CREATED:', '');
     }
 
     if (interaction.customId === 'close_ticket') {
@@ -305,10 +306,15 @@ client.on('interactionCreate', async interaction => {
             const participantsList = participantsSet.size > 0 ? Array.from(participantsSet).join(', ') : 'Brak interakcji';
 
             let closedAtStr = 'Nie zamknięto ręcznie';
-            if (topic.includes('CLOSED:')) {
-                const match = topic.match(/CLOSED:(.+)/);
+            const closedPart = parts.find(p => p && p.startsWith('CLOSED:'));
+            if (closedPart) {
+                closedAtStr = closedPart.replace('CLOSED:', '');
+            } else if (topic.includes('CLOSED:')) {
+                // Zabezpieczenie dla starego formatu topicu
+                const match = topic.match(/CLOSED:([^|]+)/);
                 if (match) closedAtStr = match[1];
             }
+            
             const archivedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
 
             let htmlContent = `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Archiwum</title><style>body{background:#313338;color:#dbdee1;font-family:sans-serif;padding:20px}.message{margin-bottom:15px}.author{font-weight:bold;color:#f2f3f5}.content{background:#2b2d31;padding:10px;border-radius:6px;display:inline-block}</style></head><body><h2>Archiwum: ${interaction.channel.name}</h2>`;
