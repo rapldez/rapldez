@@ -50,33 +50,37 @@ app.post('/api/kontakt', async (req, res) => {
         const guild = client.guilds.cache.get(SERVER_ID);
         if (!guild) {
             console.error("Błąd: Bot nie widzi serwera o ID:", SERVER_ID);
-            return res.status(500).json({ error: 'Bot nie widzi serwera.' });
+            return res.status(500).json({ error: 'Wystąpił błąd po stronie serwera.' });
         }
 
+        // Pobieramy wszystkich członków serwera do cache
         await guild.members.fetch(); 
         
-        const targetNick = nick.toLowerCase();
+        // Szukamy gościa po nicku, global name albo pseudonimie na serwerze
+        const targetNick = nick.toLowerCase().trim();
         const member = guild.members.cache.find(m => 
             m.user.username.toLowerCase() === targetNick || 
             (m.user.globalName && m.user.globalName.toLowerCase() === targetNick) ||
             (m.nickname && m.nickname.toLowerCase() === targetNick)
         );
 
-        let permissionOverwrites = [
+        // BLOKADA: Jeśli nie ma go na serwerze, odrzucamy formularz
+        if (!member) {
+            return res.status(403).json({ message: 'Nie znaleziono Cię na serwerze Discord. Dołącz z linku lub sprawdź poprawność nicku.' });
+        }
+
+        const permissionOverwrites = [
             {
-                id: guild.id,
+                id: guild.id, // @everyone
                 deny: [PermissionsBitField.Flags.ViewChannel],
+            },
+            {
+                id: member.id, // Autor formularza
+                allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory],
             }
         ];
 
-        if (member) {
-            permissionOverwrites.push({
-                id: member.id,
-                allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-            });
-        }
-
-        const channelName = `ticket-${nick.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+        const channelName = `ticket-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
         const newChannel = await guild.channels.create({
             name: channelName,
             type: ChannelType.GuildText,
@@ -84,19 +88,17 @@ app.post('/api/kontakt', async (req, res) => {
             permissionOverwrites: permissionOverwrites
         });
 
-        const memberIdText = member ? member.id : 'Brak użytkownika na serwerze';
-        const memberPing = member ? `<@${member.id}>` : `\`${nick}\``;
-        const avatarUrl = member ? member.user.displayAvatarURL({ dynamic: true }) : 'https://cdn.discordapp.com/embed/avatars/0.png';
+        const avatarUrl = member.user.displayAvatarURL({ dynamic: true });
 
         const embed = new EmbedBuilder()
             .setColor('#111214')
-            .setAuthor({ name: '🎫 RAPLDEZ • TICKET', iconURL: avatarUrl })
+            .setAuthor({ name: '🎫 RAPLDEZ • ZGŁOSZENIE', iconURL: avatarUrl })
             .setThumbnail(avatarUrl)
             .setDescription(`
 **• 👤 × Informacje o nadawcy:**
-\`—\` **× Ping:** ${memberPing}
-\`—\` **× Nick:** \`${nick}\`
-\`—\` **× ID:** \`${memberIdText}\`
+\`—\` **× Ping:** <@${member.id}>
+\`—\` **× Nick:** \`${member.user.username}\`
+\`—\` **× ID:** \`${member.id}\`
 
 **• 📩 × Informacje o zgłoszeniu:**
 \`—\` **× Temat:** \`${subject}\`
@@ -106,12 +108,12 @@ app.post('/api/kontakt', async (req, res) => {
             .setFooter({ text: 'rapldez OS • System zgłoszeń' })
             .setTimestamp();
 
-        await newChannel.send({ content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie!`, embeds: [embed] });
-        res.status(200).json({ success: true, message: 'Zgłoszenie utworzone.' });
+        await newChannel.send({ content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie od <@${member.id}>!`, embeds: [embed] });
+        res.status(200).json({ message: 'Zgłoszenie utworzone.' });
 
     } catch (error) {
         console.error("Błąd przy tworzeniu ticketa:", error);
-        res.status(500).json({ error: 'Wystąpił błąd serwera.' });
+        res.status(500).json({ message: 'Wystąpił błąd podczas tworzenia kanału.' });
     }
 });
 
