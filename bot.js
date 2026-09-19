@@ -51,37 +51,43 @@ app.post('/api/kontakt', async (req, res) => {
         const guild = client.guilds.cache.get(SERVER_ID);
         if (!guild) {
             console.error("Błąd: Bot nie widzi serwera o ID:", SERVER_ID);
-            return res.status(500).json({ error: 'Wystąpił błąd po stronie serwera.' });
+            return res.status(500).json({ message: 'Wystąpił błąd po stronie serwera.' });
         }
 
-        const targetNick = nick.toLowerCase().trim();
+        // Pobieramy całą listę członków
+        const membersList = await guild.members.fetch();
+        const inputClean = nick.toLowerCase().trim();
+
+        // Podgląd w logach Rendera, kogo bot faktycznie widzi
+        console.log(`[SZUKANIE] Szukam: "${inputClean}". Na serwerze jest ${membersList.size} osób.`);
+
         let member = null;
 
-        try {
-            // Zaawansowane szukanie: bot odpytuje bezpośrednio API Discorda o wpisany nick
-            const searchResults = await guild.members.fetch({ query: nick, limit: 10 });
-            member = searchResults.find(m => 
-                m.user.username.toLowerCase() === targetNick || 
-                (m.user.globalName && m.user.globalName.toLowerCase() === targetNick) ||
-                (m.nickname && m.nickname.toLowerCase() === targetNick)
-            );
-
-            // Zapasowe szukanie, jeśli API nic nie zwróciło
-            if (!member) {
-                await guild.members.fetch(); 
-                member = guild.members.cache.find(m => 
-                    m.user.username.toLowerCase() === targetNick || 
-                    (m.user.globalName && m.user.globalName.toLowerCase() === targetNick) ||
-                    (m.nickname && m.nickname.toLowerCase() === targetNick)
-                );
-            }
-        } catch (fetchError) {
-            console.error("Błąd podczas wyszukiwania użytkownika:", fetchError);
+        // 1. Sprawdzanie, czy użytkownik wpisał bezpośrednio ID (same cyfry)
+        if (/^\d{17,20}$/.test(inputClean)) {
+            member = membersList.get(inputClean);
         }
 
+        // 2. Jeśli nie po ID, szukamy po username, globalName, nickname
         if (!member) {
-            return res.status(403).json({ message: 'Nie znaleziono Cię na serwerze Discord. Dołącz z linku lub sprawdź poprawność nicku.' });
+            member = membersList.find(m => {
+                const uName = m.user.username ? m.user.username.toLowerCase() : '';
+                const gName = m.user.globalName ? m.user.globalName.toLowerCase() : '';
+                const sNick = m.nickname ? m.nickname.toLowerCase() : '';
+
+                return uName === inputClean || gName === inputClean || sNick === inputClean;
+            });
         }
+
+        // BLOKADA: Nie znaleziono
+        if (!member) {
+            console.log(`[BŁĄD] Nie znaleziono: ${inputClean}`);
+            return res.status(403).json({ 
+                message: 'Nie znaleziono Cię na serwerze. Wpisz swój unikalny username (bez spacji) lub swoje Discord ID!' 
+            });
+        }
+
+        console.log(`[SUKCES] Znaleziono użytkownika: ${member.user.tag} (ID: ${member.id})`);
 
         const permissionOverwrites = [
             {
@@ -90,7 +96,12 @@ app.post('/api/kontakt', async (req, res) => {
             },
             {
                 id: member.id,
-                allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory],
+                allow: [
+                    PermissionsBitField.Flags.ViewChannel, 
+                    PermissionsBitField.Flags.SendMessages, 
+                    PermissionsBitField.Flags.ReadMessageHistory,
+                    PermissionsBitField.Flags.AttachFiles
+                ],
             }
         ];
 
@@ -123,7 +134,7 @@ app.post('/api/kontakt', async (req, res) => {
             .setTimestamp();
 
         await newChannel.send({ content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie od <@${member.id}>!`, embeds: [embed] });
-        res.status(200).json({ message: 'Zgłoszenie utworzone.' });
+        res.status(200).json({ message: 'Zgłoszenie utworzone pomyślnie!' });
 
     } catch (error) {
         console.error("Błąd przy tworzeniu ticketa:", error);
