@@ -26,8 +26,8 @@ const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const REDIRECT_URI = process.env.DISCORD_REDIRECT_URI;
 
 const SERVER_ID = '1516145205215232050'; 
-const CATEGORY_ID = '1516145205936394455'; // Kategoria głosowa
-const VOICE_CREATOR_CHANNEL_ID = '1516643168479608963'; // ID kanału twórcy głosowego
+const CATEGORY_ID = '1516145205936394455'; 
+const VOICE_CREATOR_CHANNEL_ID = '1516643168479608963'; 
 const YOUR_DISCORD_ID = '920029957739139083';
 
 // Kanały
@@ -105,6 +105,9 @@ const client = new Client({
         GatewayIntentBits.AutoModerationExecution, GatewayIntentBits.GuildModeration
     ] 
 });
+
+// Cache zaproszeń (InviteLogger)
+const guildInvitesCache = new Map();
 
 const sendCrashLog = async (error) => {
     const channel = client.channels.cache.get(TERMINAL_LOG_CHANNEL);
@@ -279,7 +282,7 @@ app.post('/api/terminal', async (req, res) => {
     return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo]` });
 });
 
-// --- NOWY ENDPOINT: POBIERANIE WIADOMOŚCI DO EDYCJI ---
+// POBIERANIE WIADOMOŚCI DO EDYCJI
 app.get('/api/fetch-message/:channelId/:messageId', async (req, res) => {
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ error: 'Brak uprawnień roota.' });
     try {
@@ -631,7 +634,55 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     }
 });
 
-client.on('guildMemberAdd', member => sendServerLog('📥 Dołączenie członka', `Członek <@${member.id}> dołączył do serwera.\n${(Date.now() - member.user.createdTimestamp) < 604800000 ? '⚠️ **Wykryto młode konto!**' : ''}`));
+// --- INVITE LOGGER & GUILD MEMBER EVENTS ---
+client.on('guildMemberAdd', async member => {
+    let inviteInfo = 'Nieznane / Vanity / Direct';
+    try {
+        const cachedInvites = guildInvitesCache.get(member.guild.id);
+        const newInvites = await member.guild.invites.fetch();
+        
+        if (cachedInvites) {
+            const usedInvite = newInvites.find(inv => {
+                const prev = cachedInvites.get(inv.code);
+                return prev && inv.uses > prev.uses;
+            });
+
+            if (usedInvite) {
+                const inviter = usedInvite.inviter;
+                inviteInfo = `Kod: \`${usedInvite.code}\` | Zaprosił: ${inviter ? `<@${inviter.id}> (\`${inviter.tag}\`)` : 'Nieznany'} (Użyć: \`${usedInvite.uses}\`)`;
+            } else if (member.guild.vanityURLCode) {
+                inviteInfo = `Własny link serwera (Vanity): \`${member.guild.vanityURLCode}\``;
+            }
+        }
+
+        // Odświeżamy cache zaproszeń
+        const currentInvMap = new Map();
+        newInvites.forEach(inv => currentInvMap.set(inv.code, { uses: inv.uses, inviterId: inv.inviter?.id }));
+        guildInvitesCache.set(member.guild.id, currentInvMap);
+    } catch (e) {
+        console.error('Błąd InviteLogger:', e);
+    }
+
+    const isYoungAccount = (Date.now() - member.user.createdTimestamp) < 604800000;
+    const logDesc = `>>> **• Użytkownik:** <@${member.id}> (\`${member.user.tag}\`)\n` +
+                    `**• Źródło zaproszenia:** ${inviteInfo}\n` +
+                    `**• Wiek konta:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>${isYoungAccount ? ' ⚠️ **(Młode konto!)**' : ''}`;
+
+    sendServerLog('📥 Dołączenie członka (Invite Tracker)', logDesc);
+});
+
+// Dynamiczne aktualizowanie cache przy tworzeniu/usuwaniu zaproszeń
+client.on('inviteCreate', async invite => {
+    const cached = guildInvitesCache.get(invite.guild.id) || new Map();
+    cached.set(invite.code, { uses: invite.uses, inviterId: invite.inviter?.id });
+    guildInvitesCache.set(invite.guild.id, cached);
+});
+
+client.on('inviteDelete', async invite => {
+    const cached = guildInvitesCache.get(invite.guild.id);
+    if (cached) cached.delete(invite.code);
+});
+
 client.on('guildMemberRemove', member => sendServerLog('📤 Opuszczenie serwera', `Członek <@${member.id}> opuścił serwer.`));
 client.on('guildMemberUpdate', (oldM, newM) => {
     if (oldM.nickname !== newM.nickname) sendServerLog('📝 Zmiana pseudonimu', `<@${newM.id}> zmienił nick na \`${newM.nickname || newM.user.username}\`.`);
@@ -647,7 +698,22 @@ client.on('guildBanRemove', ban => sendServerLog('🕊️ Odbanowanie członka',
 
 // --- CYBERNETYCZNE CENTRUM DOWODZENIA (STATUS Z TELEMETRIĄ) ---
 client.once('ready', async () => {
+    const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => { console.log(`Serwer działa na porcie ${PORT}!`); });
+
+    // Wczytanie początkowego stanu zaproszeń serwera do cache
+    try {
+        const guild = client.guilds.cache.get(SERVER_ID);
+        if (guild) {
+            const firstInvites = await guild.invites.fetch();
+            const invMap = new Map();
+            firstInvites.forEach(inv => invMap.set(inv.code, { uses: inv.uses, inviterId: inv.inviter?.id }));
+            guildInvitesCache.set(guild.id, invMap);
+        }
+    } catch (e) {
+        console.error('Błąd wstępnego buforowania zaproszeń:', e);
+    }
+
     try {
         const statusChannel = client.channels.cache.get(STATUS_CHANNEL_ID);
         if (statusChannel) {
@@ -864,5 +930,4 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-const PORT = process.env.PORT || 3000;
 client.login(BOT_TOKEN);
