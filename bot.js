@@ -1453,25 +1453,26 @@ client.on('messageCreate', async message => {
 
 // --- SYSTEM: GHOST PING DETEKTOR ---
 client.on('messageDelete', async message => {
-    // Ignorujemy wiadomości od botów, brak gildii lub wiadomości bez treści/wzmianek
     if (message.author?.bot || !message.guild || message.mentions.users.size === 0) return;
 
-    // Pobieramy osoby, które zostały oznaczone
-    const mentionedUsers = message.mentions.users.map(user => user.tag).join(', ');
+    const mentionedUsers = message.mentions.users.map(user => `<@${user.id}>`).join(', ');
 
-    // Tworzymy czytelny komunikat o ghost pingu
+    // Podrasowany embed: czerwony kolor, lepszy układ i ikony
     const logEmbed = {
-        color: 0xffffff,
-        title: '👻 Wykryto Ghost Ping!',
+        color: 0xff0000, // Czerwony kolor ostrzegawczy
+        title: '🚨 Wykryto usunięty Ghost Ping!',
+        description: 'Ktoś oznaczył użytkownika, a następnie błyskawicznie skasował wiadomość.',
         fields: [
-            { name: 'Autor wiadomości', value: `${message.author.tag} (${message.author.id})`, inline: true },
-            { name: 'Oznaczone osoby', value: mentionedUsers, inline: true },
-            { name: 'Treść skasowanej wiadomości', value: message.content || '[Brak tekstu / sam embed lub załącznik]' }
+            { name: '👤 Autor wiadomości', value: `> ${message.author} (\`${message.author.tag}\`)`, inline: false },
+            { name: '🎯 Oznaczone osoby', value: `> ${mentionedUsers}`, inline: false },
+            { name: '💬 Skasowana treść', value: `> ${message.content || '*[Brak tekstu / sam załącznik]*'}`, inline: false }
         ],
+        footer: {
+            text: `ID użytkownika: ${message.author.id}`
+        },
         timestamp: new Date().toISOString()
     };
 
-    // Tutaj wpisz ID swojego kanału logów (możesz też użyć zmiennej środowiskowej, np. process.env.LOG_CHANNEL_ID)
     const LOG_CHANNEL_ID = '1550913229893410817'; 
     const logChannel = message.guild.channels.cache.get(LOG_CHANNEL_ID);
 
