@@ -31,11 +31,21 @@ const YOUR_DISCORD_ID = '920029957739139083';
 const LOG_CHANNEL_ID = '1550753070726512730'; 
 const TERMINAL_LOG_CHANNEL = '1550789490518528010';
 
-// --- FUNKCJE POMOCNICZE ---
-async function logToTerminalDiscord(messageText) {
+// --- FUNKCJE POMOCNICZE (NOWE EMBEDY LOGÓW) ---
+async function logToTerminalDiscord(title, description, color = '#2b2d31') {
     try {
         const channel = client.channels.cache.get(TERMINAL_LOG_CHANNEL);
-        if (channel) await channel.send(messageText);
+        if (!channel) return;
+        
+        const embed = new EmbedBuilder()
+            .setColor(color)
+            .setAuthor({ name: '💻 TERMINAL WWW • LOGI' })
+            .setTitle(title)
+            .setDescription(description)
+            .setTimestamp()
+            .setFooter({ text: 'rapldez OS • Nasłuch na żywo' });
+            
+        await channel.send({ embeds: [embed] });
     } catch (e) {
         console.error('Błąd logowania do terminala na DC:', e);
     }
@@ -133,10 +143,10 @@ app.get('/auth/discord/callback', async (req, res) => {
 
         if (userData.id === YOUR_DISCORD_ID) {
             req.session.user = { id: userData.id, username: userData.username };
-            logToTerminalDiscord(`🔐 **Logowanie:** Udane logowanie do panelu WWW z autoryzacją roota.`);
+            logToTerminalDiscord('🔐 Autoryzacja udana', 'Panel roota został pomyślnie odblokowany.', '#23a559');
             return res.redirect('/?login=success');
         } else {
-            logToTerminalDiscord(`⚠️ **Ostrzeżenie:** Zablokowano próbę logowania z niezgodnego konta: \`${userData.username}\` (${userData.id})`);
+            logToTerminalDiscord('⚠️ Odrzucono logowanie', `Zablokowano próbę dostępu do panelu.\n**Konto:** \`${userData.username}\`\n**ID:** \`${userData.id}\``, '#ed4245');
             return res.redirect('/?error=unauthorized');
         }
     } catch (error) {
@@ -238,28 +248,31 @@ app.post('/webhook/github', async (req, res) => {
 
 // --- KOMENDY TERMINALA WWW ---
 app.post('/api/terminal', async (req, res) => {
+    const cmd = req.body.command ? req.body.command.trim() : '';
+
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) {
-        logToTerminalDiscord(`⚠️ **Alert:** Zablokowano dostęp do komend terminala z niezautoryzowanego klienta (IP: \`${req.ip || 'Nieznane'}\`).`);
+        logToTerminalDiscord('🚫 Blokada autoryzacji', `Użytkownik bez uprawnień próbował wywołać komendę.\n**Wpisano:** \`${cmd || '[Puste]'}\`\n**IP:** \`${req.ip || 'Nieznane'}\``, '#ed4245');
         return res.status(403).json({ output: 'Odmowa dostępu. Brak autoryzacji roota.' });
     }
 
-    const cmd = req.body.command ? req.body.command.trim().toLowerCase() : '';
-    logToTerminalDiscord(`💻 **Terminal WWW:** Root wywołał polecenie: \`${cmd}\``);
+    logToTerminalDiscord('⌨️ Wprowadzono komendę', `Root wywołał polecenie w terminalu na stronie:\n\`\`\`bash\n${cmd || '[Puste polecenie]'}\n\`\`\``, '#5865F2');
 
-    if (cmd === 'sysinfo') {
+    const cmdLower = cmd.toLowerCase();
+
+    if (cmdLower === 'sysinfo') {
         const mem = Math.round(process.memoryUsage().rss / 1024 / 1024);
         const uptime = Math.floor(process.uptime());
-        return res.json({ output: `System Uptime: ${uptime}s | RAM Usage: ${mem}MB \vert{} WS Ping:${client.ws.ping}ms` });
+        return res.json({ output: `System Uptime: ${uptime}s | RAM Usage: ${mem}MB | WS Ping: ${client.ws.ping}ms` });
     }
     
-    if (cmd === 'db stats') {
+    if (cmdLower === 'db stats') {
         const tickCount = await TicketArchive.countDocuments();
         const views = await Counter.findOne({ id: 'views' });
         return res.json({ output: `MongoDB Atlas Stats:\n- Zarchiwizowane tickety: ${tickCount}\n- Liczba odsłon strony: ${views ? views.count : 0}` });
     }
     
-    if (cmd.startsWith('bot status ')) {
-        const statusText = req.body.command.substring(11);
+    if (cmdLower.startsWith('bot status ')) {
+        const statusText = cmd.substring(11);
         client.user.setActivity(statusText);
         return res.json({ output: `Ustawiono nowy status bota: "${statusText}"` });
     }
@@ -269,10 +282,10 @@ app.post('/api/terminal', async (req, res) => {
 
 app.post('/api/reboot', (req, res) => {
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) {
-        logToTerminalDiscord(`⚠️ **Alert:** Odmowa restartu systemu z niezautoryzowanego klienta (IP: \`${req.ip || 'Nieznane'}\`).`);
+        logToTerminalDiscord('🚫 Zablokowano restart', `Próba wymuszenia restartu bez uprawnień (IP: \`${req.ip || 'Nieznane'}\`).`, '#ed4245');
         return res.status(403).json({ error: 'Brak uprawnień' });
     }
-    logToTerminalDiscord(`💻 **Terminal WWW:** Root wymusił polecenie \`reboot\`. Trwa restart...`);
+    logToTerminalDiscord('🔄 Restart systemu', `Zlecono polecenie \`reboot\`. Zamykanie procesów...`, '#fee75c');
     res.json({ message: 'Restart...' });
     setTimeout(() => process.exit(1), 1000);
 });
@@ -340,7 +353,6 @@ client.on('messageCreate', async message => {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
     
-    // Obsługa przycisku Restart po crashu
     if (interaction.customId === 'crash_restart') {
         if (interaction.user.id !== YOUR_DISCORD_ID) return interaction.reply({ content: 'Brak uprawnień.', ephemeral: true });
         await interaction.reply('🔄 Restartuję system za pośrednictwem środowiska...');
@@ -365,7 +377,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
         }
         const closedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
-        interaction.channel.setTopic(`${targetId}|CREATED:${createdAtStr}\vert{}CLOSED:${closedAtStr}`).catch(() => null);
+        interaction.channel.setTopic(`${targetId}|CREATED:${createdAtStr}|CLOSED:${closedAtStr}`).catch(() => null);
 
         const reopenRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
@@ -425,16 +437,18 @@ client.on('interactionCreate', async interaction => {
                 htmlContent: htmlContent
             });
 
+            // Przywrócony zwarty wygląd archiwalnego embeda z lepszym kontrastem
             const embedLog = new EmbedBuilder()
                 .setColor('#23a559')
                 .setAuthor({ name: '📁 RAPLDEZ OS • ARCHIWUM ZGŁOSZENIA' })
-                .addFields(
-                    { name: '🏷️ Kanał', value: `\`${interaction.channel.name}\``, inline: true },
-                    { name: '💬 Wiadomości', value: `\`${messages.length}\``, inline: true },
-                    { name: '👥 Uczestnicy', value: `\`${participantsList}\``, inline: false },
-                    { name: '🕒 Otwarto', value: `\`${createdAtStr}\``, inline: true },
-                    { name: '🔒 Zamknięto', value: `\`${closedAtStr}\``, inline: true },
-                    { name: '💾 Zarchiwizował', value: `<@${interaction.user.id}>`, inline: false }
+                .setDescription(
+                    `>>> **• Nazwa kanału:** \`${interaction.channel.name}\`\n` +
+                    `**• Ilość wiadomości:** \`${messages.length}\`\n` +
+                    `**• Uczestnicy:** \`${participantsList}\`\n` +
+                    `**• Otwarcie:** \`${createdAtStr}\`\n` +
+                    `**• Zamknięcie:** \`${closedAtStr}\`\n` +
+                    `**• Archiwizacja:** \`${archivedAtStr}\`\n` +
+                    `**• Zarchiwizował:** <@${interaction.user.id}>`
                 )
                 .setFooter({ text: 'Zapisano w bazie MongoDB' })
                 .setTimestamp();
