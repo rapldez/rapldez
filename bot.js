@@ -569,7 +569,17 @@ client.on('messageCreate', async message => {
             }));
 
             await targetChannel.permissionOverwrites.set(overwrites);
-            message.reply(`✅ Pomyślnie zsynchronizowano uprawnienia z <#${sourceChannel.id}> na <#${targetChannel.id}>!`);
+
+            const successEmbed = new EmbedBuilder()
+                .setColor(MAIN_COLOR)
+                .setAuthor({ name: '🔄 SYNCHRONIZACJA PERMISJI' })
+                .setDescription(`>>> **• Wzorzec:** <#${sourceChannel.id}>\n**• Cel:** <#${targetChannel.id}>\n**• Status:** \`Pomyślnie zaktualizowano uprawnienia\`\n**• Wykonał:** <@${message.author.id}>`)
+                .setTimestamp()
+                .setFooter({ text: 'rapldez OS • Bezpieczeństwo' });
+
+            await message.channel.send({ embeds: [successEmbed] });
+            await message.delete().catch(() => {});
+
             sendServerLog('🔄 Synchronizacja Permisji', `Root <@${message.author.id}> skopiował uprawnienia z <#${sourceChannel.id}> do <#${targetChannel.id}>.`);
         } catch (err) {
             console.error('Błąd sync-perms:', err);
@@ -599,7 +609,7 @@ client.on('messageCreate', async message => {
 
         const channelOwnerId = tempVoiceChannels.get(userVoiceChannel.id);
         if (channelOwnerId !== message.author.id && message.author.id !== YOUR_DISCORD_ID) {
-            return message.reply('❌ Не jesteś właścicielem tego pokoju głosowego.').then(m => setTimeout(() => m.delete().catch(()=>null), 4000));
+            return message.reply('❌ Nie jesteś właścicielem tego pokoju głosowego.').then(m => setTimeout(() => m.delete().catch(()=>null), 4000));
         }
 
         const args = message.content.split(' ');
