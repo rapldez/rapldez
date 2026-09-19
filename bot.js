@@ -575,10 +575,14 @@ client.on('messageCreate', async message => {
                 .setAuthor({ name: '🔄 SYNCHRONIZACJA PERMISJI' })
                 .setDescription(`>>> **• Wzorzec:** <#${sourceChannel.id}>\n**• Cel:** <#${targetChannel.id}>\n**• Status:** \`Pomyślnie zaktualizowano uprawnienia\`\n**• Wykonał:** <@${message.author.id}>`)
                 .setTimestamp()
-                .setFooter({ text: 'rapldez OS • Bezpieczeństwo' });
+                .setFooter({ text: 'rapldez OS • Wiadomość zniknie za 5 sekund' });
 
-            await message.channel.send({ embeds: [successEmbed] });
+            const replyMsg = await message.channel.send({ embeds: [successEmbed] });
             await message.delete().catch(() => {});
+
+            setTimeout(() => {
+                replyMsg.delete().catch(() => {});
+            }, 5000);
 
             sendServerLog('🔄 Synchronizacja Permisji', `Root <@${message.author.id}> skopiował uprawnienia z <#${sourceChannel.id}> do <#${targetChannel.id}>.`);
         } catch (err) {
