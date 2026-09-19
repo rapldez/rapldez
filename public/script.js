@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
             titleIndex--;
             document.title = titleText.substring(0, titleIndex) || "\u200B";
             if (titleIndex === 0) {
-                setTimeout(() => { isDeleting = false; animateTitle(); }, 1000); // dłuższa pauza po wyczyszczeniu
+                setTimeout(() => { isDeleting = false; animateTitle(); }, 1500); // dłuższa pauza po wyczyszczeniu
                 return;
             }
         }
