@@ -29,7 +29,6 @@
                 <i class="fa-solid fa-xmark" id="close-terminal"></i>
             </div>
             <div class="terminal-body" id="terminal-output"></div>
-            <!-- OTO POPRAWKA: Używamy form, żeby klawiatura w telefonie łapała Enter -->
             <form id="terminal-form" class="terminal-input-line" style="margin: 0; display: flex;">
                 <span class="prompt">root@rapldez:</span>
                 <input type="text" id="terminal-input" autocomplete="off" spellcheck="false" style="flex-grow: 1; background: transparent; border: none; color: inherit; font-family: inherit; outline: none; margin-left: 5px;">
@@ -44,8 +43,7 @@
                 <i class="fa-solid fa-xmark" id="close-contact"></i>
             </div>
             <div class="contact-body">
-                <input type="text" id="contact-nick" placeholder="Twój Nick" required>
-                <input type="text" id="contact-discord" placeholder="Twój Discord ID (opcjonalnie)">
+                <input type="text" id="contact-nick" placeholder="Twój dokładny nick z Discorda" required>
                 <input type="text" id="contact-subject" placeholder="Temat kontaktu" required>
                 <textarea id="contact-message" placeholder="Treść wiadomości..." rows="4" required></textarea>
                 <button id="send-contact-btn">Wyślij zgłoszenie</button>
