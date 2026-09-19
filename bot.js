@@ -99,13 +99,15 @@ const giveawaySchema = new mongoose.Schema({
 });
 const Giveaway = mongoose.model('Giveaway', giveawaySchema);
 
-// Schemat ankiet w bazie danych
+// Schemat ankiet z czasem trwania
 const pollSchema = new mongoose.Schema({
     messageId: String,
+    channelId: String,
     question: String,
     options: [String],
-    votes: { type: Map, of: Number, default: {} }, // userId -> optionIndex
-    voters: { type: Map, of: Number, default: {} }   // userId -> optionIndex
+    endsAt: Number,
+    ended: { type: Boolean, default: false },
+    votes: { type: Map, of: Number, default: {} }
 });
 const Poll = mongoose.model('Poll', pollSchema);
 
@@ -602,21 +604,33 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // --- KOMENDA: INTERAKTYWNA ANKIETA (!poll) ---
+    // --- KOMENDA: INTERAKTYWNA ANKIETA Z CZASEM (!poll [minuty] | [pytanie] | [opcja1] | [opcja2]) ---
     if (message.content.startsWith('!poll') && message.author.id === YOUR_DISCORD_ID) {
         const argsText = message.content.substring(5).trim();
         const parts = argsText.split('|').map(p => p.trim()).filter(Boolean);
 
         if (parts.length < 3) {
-            return message.reply('❌ Użycie: `!poll Pytanie | Opcja 1 | Opcja 2` (minimum 2 opcje)');
+            return message.reply('❌ Użycie: `!poll [minuty] | [Pytanie] | [Opcja 1] | [Opcja 2]`');
         }
 
-        const question = parts[0];
-        const options = parts.slice(1, 6); // Maksymalnie 5 opcji dla przycisków w rzędzie
+        const minutes = parseInt(parts[0]);
+        if (isNaN(minutes) || minutes <= 0) {
+            return message.reply('❌ Podaj poprawną liczbę minut jako pierwszy argument, np. `!poll 5 | Pytanie? | Tak | Nie`');
+        }
+
+        const question = parts[1];
+        const options = parts.slice(2, 7); // Maksymalnie 5 opcji
+
+        if (options.length < 2) {
+            return message.reply('❌ Ankieta musi mieć przynajmniej 2 opcje.');
+        }
 
         await message.delete().catch(() => {});
 
-        const generatePollDescription = (options, votesMap) => {
+        const endsAt = Date.now() + (minutes * 60 * 1000);
+        const unixTime = Math.floor(endsAt / 1000);
+
+        const generatePollDescription = (options, votesMap, isEnded = false) => {
             let totalVotes = 0;
             const counts = options.map((_, idx) => {
                 let c = 0;
@@ -630,6 +644,12 @@ client.on('messageCreate', async message => {
             });
 
             let desc = `>>> **❓ Pytanie:** \`${question}\`\n\n`;
+            if (!isEnded) {
+                desc += `**• Zakończenie:** <t:${unixTime}:R> (<t:${unixTime}:f>)\n\n`;
+            } else {
+                desc += `**• Status:** \`ZAKOŃCZONA\`\n\n`;
+            }
+
             options.forEach((opt, idx) => {
                 const count = counts[idx];
                 const percent = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
@@ -644,7 +664,7 @@ client.on('messageCreate', async message => {
         const pollEmbed = new EmbedBuilder()
             .setColor(MAIN_COLOR)
             .setAuthor({ name: '📊 RAPLDEZ OS • SYSTEM ANKIET' })
-            .setDescription(generatePollDescription(options, new Map()))
+            .setDescription(generatePollDescription(options, new Map(), false))
             .setFooter({ text: 'rapldez OS • Głosuj za pomocą przycisków' })
             .setTimestamp();
 
@@ -662,10 +682,12 @@ client.on('messageCreate', async message => {
 
         await Poll.create({
             messageId: pollMsg.id,
+            channelId: message.channel.id,
             question: question,
             options: options,
-            votes: {},
-            voters: {}
+            endsAt: endsAt,
+            ended: false,
+            votes: {}
         });
 
         return;
@@ -962,9 +984,61 @@ client.on('roleDelete', r => sendServerLog('🗑️ Usunięcie roli', `Usunięto
 client.on('guildBanAdd', ban => sendServerLog('🔨 Zbanowanie członka', `Zbanowano \`${ban.user.tag}\`.`));
 client.on('guildBanRemove', ban => sendServerLog('🕊️ Odbanowanie członka', `Odbanowano \`${ban.user.tag}\`.`));
 
+// Pętla sprawdzająca zakończenie ankiet oraz konkursów
 setInterval(async () => {
     try {
-        const activeGiveaways = await Giveaway.find({ ended: false, endsAt: { $lte: Date.now() } });
+        const now = Date.now();
+
+        // Ankiety
+        const activePolls = await Poll.find({ ended: false, endsAt: { $lte: now } });
+        for (const poll of activePolls) {
+            poll.ended = true;
+            await poll.save();
+
+            const channel = client.channels.cache.get(poll.channelId);
+            if (!channel) continue;
+
+            const msg = await channel.messages.fetch(poll.messageId).catch(() => null);
+            if (!msg) continue;
+
+            const generatePollDescription = (options, votesMap) => {
+                let totalVotes = 0;
+                const counts = options.map((_, idx) => {
+                    let c = 0;
+                    if (votesMap) {
+                        for (const optIdx of votesMap.values()) {
+                            if (optIdx === idx) c++;
+                        }
+                    }
+                    totalVotes += c;
+                    return c;
+                });
+
+                let desc = `>>> **❓ Pytanie:** \`${poll.question}\`\n\n**• Status:** \`ZAKOŃCZONA\`\n\n`;
+                options.forEach((opt, idx) => {
+                    const count = counts[idx];
+                    const percent = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+                    const filled = Math.round(percent / 10);
+                    const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+                    desc += `**${idx + 1}.**${opt}\n\`${bar}\` **${percent}%** (\`${count} głosów\`)\n\n`;
+                });
+                desc += `**• Łącznie głosów:** \`${totalVotes}\``;
+                return desc;
+            };
+
+            const originalEmbed = msg.embeds[0];
+            const finalEmbed = new EmbedBuilder()
+                .setColor(originalEmbed.color || MAIN_COLOR)
+                .setAuthor({ name: '📊 RAPLDEZ OS • ANKIETA ZAKOŃCZONA' })
+                .setDescription(generatePollDescription(poll.options, poll.votes))
+                .setFooter({ text: 'rapldez OS • Wyniki końcowe' })
+                .setTimestamp();
+
+            await msg.edit({ embeds: [finalEmbed], components: [] }).catch(() => null);
+        }
+
+        // Giveaways
+        const activeGiveaways = await Giveaway.find({ ended: false, endsAt: { $lte: now } });
         for (const g of activeGiveaways) {
             g.ended = true;
             await g.save();
@@ -998,7 +1072,7 @@ setInterval(async () => {
             }
         }
     } catch (e) {
-        console.error('Błąd pętli giveaways:', e);
+        console.error('Błąd pętli czasowej:', e);
     }
 }, 10 * 1000);
 
@@ -1078,17 +1152,20 @@ client.on('interactionCreate', async interaction => {
     // Obsługa głosowania w ankietach
     if (interaction.customId.startsWith('poll_vote_')) {
         try {
-            const optionIndex = parseInt(interaction.customId.split('_')[2]);
             const poll = await Poll.findOne({ messageId: interaction.message.id });
 
             if (!poll) {
                 return interaction.reply({ content: '❌ Ta ankieta już nie istnieje w bazie.', ephemeral: true });
             }
 
+            if (poll.ended || Date.now() >= poll.endsAt) {
+                return interaction.reply({ content: '❌ Czas na głosowanie w tej ankiecie dobiegł końca!', ephemeral: true });
+            }
+
+            const optionIndex = parseInt(interaction.customId.split('_')[2]);
             const userId = interaction.user.id;
             const currentVotes = poll.votes instanceof Map ? poll.votes : new Map(Object.entries(poll.votes || {}));
             
-            // Zapisz lub zmień głos użytkownika
             currentVotes.set(userId, optionIndex);
             poll.votes = currentVotes;
             await poll.save();
@@ -1097,14 +1174,17 @@ client.on('interactionCreate', async interaction => {
                 let totalVotes = 0;
                 const counts = options.map((_, idx) => {
                     let c = 0;
-                    for (const optIdx of votesMap.values()) {
-                        if (optIdx === idx) c++;
+                    if (votesMap) {
+                        for (const optIdx of votesMap.values()) {
+                            if (optIdx === idx) c++;
+                        }
                     }
                     totalVotes += c;
                     return c;
                 });
 
-                let desc = `>>> **❓ Pytanie:** \`${poll.question}\`\n\n`;
+                const unixTime = Math.floor(poll.endsAt / 1000);
+                let desc = `>>> **❓ Pytanie:** \`${poll.question}\`\n\n**• Zakończenie:** <t:${unixTime}:R> (<t:${unixTime}:f>)\n\n`;
                 options.forEach((opt, idx) => {
                     const count = counts[idx];
                     const percent = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
