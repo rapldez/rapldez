@@ -8,17 +8,21 @@ const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilde
 
 const app = express();
 
-// --- OD PALENIE SERWERA WWW OD RAZU DLA RENDERA ---
+// --- START SERWERA WWW DLA RENDERA ---
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Serwer działa na porcie ${PORT}!`);
 });
 
-// Podpięcie osobnego panelu zarządzania i terminala z pliku panel.js
-const panelRouter = require('./panel')(client);
-app.use('/', panelRouter);
-
-
+// --- PRZECHWYTYWANIE LOGÓW DO TERMINALA W PANELU ---
+let liveLogs = [];
+const originalConsoleLog = console.log;
+console.log = function(...args) {
+    const text = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' ');
+    liveLogs.unshift(`[${new Date().toLocaleTimeString('pl-PL')}]${text}`);
+    if (liveLogs.length > 150) liveLogs.pop();
+    originalConsoleLog.apply(console, args);
+};
 
 // --- SPRAWDZANIE ZMIENNYCH ŚRODOWISKOWYCH (.env) ---
 const requiredEnv = ['BOT_TOKEN', 'MONGO_URI', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI'];
@@ -64,6 +68,211 @@ const FULL_LOGS_CHANNEL_ID = '1550791675486408754';
 
 const MAIN_COLOR = '#024442';
 
+// --- KLIENT DISCORD ---
+const client = new Client({ 
+    intents: [
+        GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildBans,
+        GatewayIntentBits.GuildInvites, GatewayIntentBits.GuildEmojisAndStickers, GatewayIntentBits.GuildWebhooks,
+        GatewayIntentBits.GuildScheduledEvents, GatewayIntentBits.AutoModerationConfiguration, 
+        GatewayIntentBits.AutoModerationExecution, GatewayIntentBits.GuildModeration
+    ] 
+});
+
+// --- CENTRUM DOWODZENIA / PANEL WWW ---
+app.get('/panel', (req, res) => {
+    let channelOptions = '';
+    if (client.isReady()) {
+        client.guilds.cache.forEach(guild => {
+            guild.channels.cache.forEach(channel => {
+                if (channel.type === 0) {
+                    channelOptions += `<option value="${channel.id}">${guild.name} / #${channel.name}</option>`;
+                }
+            });
+        });
+    }
+
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="pl">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Centrum Dowodzenia - rapldez</title>
+            <style>
+                :root {
+                    --bg-main: #121214;
+                    --bg-card: #18181b;
+                    --border-color: #27272a;
+                    --accent: #5865F2;
+                    --accent-hover: #4752C4;
+                    --text-main: #f4f4f5;
+                    --text-muted: #a1a1aa;
+                    --terminal-bg: #09090b;
+                    --terminal-text: #22c55e;
+                }
+                body {
+                    background-color: var(--bg-main);
+                    color: var(--text-main);
+                    font-family: 'Inter', -apple-system, sans-serif;
+                    margin: 0;
+                    padding: 15px;
+                    box-sizing: border-box;
+                }
+                header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    background: var(--bg-card);
+                    border: 1px solid var(--border-color);
+                    padding: 15px 20px;
+                    border-radius: 12px;
+                    margin-bottom: 20px;
+                }
+                h1 { color: var(--text-main); margin: 0; font-size: 18px; font-weight: 600; }
+                .grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+                    gap: 20px;
+                    max-width: 1200px;
+                    margin: 0 auto;
+                }
+                .card {
+                    background: var(--bg-card);
+                    border: 1px solid var(--border-color);
+                    padding: 20px;
+                    border-radius: 12px;
+                }
+                .card h3 { margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; font-size: 16px; }
+                .form-group { margin-bottom: 12px; }
+                label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+                input, textarea, select {
+                    width: 100%;
+                    background: var(--terminal-bg);
+                    border: 1px solid var(--border-color);
+                    color: #fff;
+                    padding: 10px;
+                    border-radius: 8px;
+                    box-sizing: border-box;
+                    font-size: 13px;
+                }
+                textarea { resize: vertical; height: 80px; }
+                .discord-embed-preview {
+                    background: #2b2d31;
+                    border-left: 4px solid #5865F2;
+                    padding: 12px;
+                    border-radius: 4px;
+                    margin-top: 15px;
+                    font-size: 13px;
+                }
+                .embed-title { font-weight: bold; margin-bottom: 5px; }
+                .embed-desc { color: #dcddde; white-space: pre-wrap; word-break: break-all; }
+                .btn {
+                    background: var(--accent);
+                    color: white;
+                    border: none;
+                    padding: 10px 15px;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: 600;
+                    width: 100%;
+                    margin-top: 10px;
+                }
+                .btn-success { background: #23a55a; }
+                .terminal-container { grid-column: 1 / -1; }
+                .terminal {
+                    background: var(--terminal-bg);
+                    border: 1px solid var(--border-color);
+                    border-radius: 8px;
+                    padding: 15px;
+                    height: 250px;
+                    overflow-y: auto;
+                    font-family: monospace;
+                    font-size: 12px;
+                    color: var(--terminal-text);
+                    line-height: 1.5;
+                }
+                .terminal div { margin-bottom: 4px; white-space: pre-wrap; word-break: break-all; }
+            </style>
+        </head>
+        <body>
+            <header>
+                <h1>🛡️ Centrum Dowodzenia Botem</h1>
+                <button class="btn" style="width: auto; margin: 0; padding: 6px 12px;" onclick="location.reload()">Odśwież Panel</button>
+            </header>
+            
+            <div class="grid">
+                <div class="card">
+                    <h3>Kreator Embedów</h3>
+                    <form action="/send-embed" method="POST">
+                        <div class="form-group">
+                            <label>Wybierz kanał docelowy</label>
+                            <select name="channelId">
+                                ${channelOptions || '<option>Brak kanałów (poczekaj na połączenie bota)</option>'}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Tytuł embeda</label>
+                            <input type="text" name="title" id="embedTitleInput" placeholder="Wpisz tytuł..." oninput="updatePreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>Treść wiadomości</label>
+                            <textarea name="description" id="embedDescInput" placeholder="Wpisz treść..." oninput="updatePreview()"></textarea>
+                        </div>
+                        
+                        <label>Podgląd:</label>
+                        <div class="discord-embed-preview">
+                            <div class="embed-title" id="prevTitle">Twój tytuł...</div>
+                            <div class="embed-desc" id="prevDesc">Tutaj pojawi się treść wiadomości...</div>
+                        </div>
+
+                        <button type="submit" class="btn btn-success">🚀 Wyślij na Discorda</button>
+                    </form>
+                </div>
+
+                <div class="card terminal-container">
+                    <h3>Terminal / Logi Serwera na Żywo</h3>
+                    <div class="terminal" id="terminal-box">
+                        ${liveLogs.length > 0 ? liveLogs.map(log => `<div>${log}</div>`).join('') : '<div>Oczekiwanie na logi...</div>'}
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                const term = document.getElementById('terminal-box');
+                term.scrollTop = term.scrollHeight;
+
+                function updatePreview() {
+                    document.getElementById('prevTitle').innerText = document.getElementById('embedTitleInput').value || 'Twój tytuł...';
+                    document.getElementById('prevDesc').innerText = document.getElementById('embedDescInput').value || 'Tutaj pojawi się treść wiadomości...';
+                }
+            </script>
+        </body>
+        </html>
+    `);
+});
+
+app.post('/send-embed', express.urlencoded({ extended: true }), async (req, res) => {
+    const { channelId, title, description } = req.body;
+    try {
+        const channel = await client.channels.fetch(channelId);
+        if (channel && channel.isTextBased()) {
+            await channel.send({
+                embeds: [{
+                    color: 0x5865F2,
+                    title: title || undefined,
+                    description: description || undefined,
+                    timestamp: new Date().toISOString()
+                }]
+            });
+            console.log(`[PANEL] Wysłano embed na kanał ID: ${channelId}`);
+        }
+    } catch (err) {
+        console.error('[BŁĄD PANELU] Nie udało się wysłać embeda:', err);
+    }
+    res.redirect('/panel');
+});
+
 // --- FUNKCJE POMOCNICZE ---
 const createLogEmbed = (title, desc) => new EmbedBuilder().setColor(MAIN_COLOR).setAuthor({ name: title }).setDescription(desc).setTimestamp();
 
@@ -96,7 +305,7 @@ async function isVPN(ip) {
     } catch (e) { return false; }
 }
 
-// --- MONGODB SCHEMAS ---
+// --- MONGODB ---
 const counterSchema = new mongoose.Schema({ id: { type: String, default: 'views' }, count: { type: Number, default: 0 } });
 const Counter = mongoose.model('Counter', counterSchema);
 
@@ -116,23 +325,14 @@ const embedPresetSchema = new mongoose.Schema({ name: String, content: String, a
 const EmbedPreset = mongoose.model('EmbedPreset', embedPresetSchema);
 
 const giveawaySchema = new mongoose.Schema({
-    messageId: String,
-    channelId: String,
-    prize: String,
-    endsAt: Number,
-    ended: { type: Boolean, default: false },
-    participants: [String]
+    messageId: String, channelId: String, prize: String, endsAt: Number,
+    ended: { type: Boolean, default: false }, participants: [String]
 });
 const Giveaway = mongoose.model('Giveaway', giveawaySchema);
 
 const pollSchema = new mongoose.Schema({
-    messageId: String,
-    channelId: String,
-    question: String,
-    options: [String],
-    endsAt: Number,
-    ended: { type: Boolean, default: false },
-    votes: { type: Map, of: Number, default: {} }
+    messageId: String, channelId: String, question: String, options: [String],
+    endsAt: Number, ended: { type: Boolean, default: false }, votes: { type: Map, of: Number, default: {} }
 });
 const Poll = mongoose.model('Poll', pollSchema);
 
@@ -142,16 +342,6 @@ if (MONGO_URI) {
         .then(() => { dbStatus = '🟢 Połączono (Stabilna)'; console.log('✅ Połączono z MongoDB!'); })
         .catch(err => { dbStatus = '🔴 Błąd połączenia'; console.error(err); });
 }
-
-const client = new Client({ 
-    intents: [
-        GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildBans,
-        GatewayIntentBits.GuildInvites, GatewayIntentBits.GuildEmojisAndStickers, GatewayIntentBits.GuildWebhooks,
-        GatewayIntentBits.GuildScheduledEvents, GatewayIntentBits.AutoModerationConfiguration, 
-        GatewayIntentBits.AutoModerationExecution, GatewayIntentBits.GuildModeration
-    ] 
-});
 
 const guildInvitesCache = new Map();
 
@@ -165,6 +355,7 @@ const sendCrashLog = async (error) => {
 process.on('uncaughtException', async (err) => { console.error(err); await sendCrashLog(err); });
 process.on('unhandledRejection', async (reason) => { console.error(reason); await sendCrashLog(reason); });
 
+// --- AUTH DISCORD ---
 app.get('/auth/discord', (req, res) => res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`));
 
 app.get('/auth/discord/callback', async (req, res) => {
@@ -1192,6 +1383,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
+// --- ANTY-PHISHING ---
 const BLOCKED_DOMAINS = [
     'steam-gift.com', 
     'discord-nitro.ru', 
@@ -1215,6 +1407,7 @@ client.on('messageCreate', async message => {
     }
 });
 
+// --- GHOST PING DETEKTOR ---
 client.on('messageDelete', async message => {
     if (message.author?.bot || !message.guild || message.mentions.users.size === 0) return;
     const mentionedUsers = message.mentions.users.map(user => `<@${user.id}>`).join(', ');
