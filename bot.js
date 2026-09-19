@@ -1451,5 +1451,34 @@ client.on('messageCreate', async message => {
     }
 });
 
+// --- SYSTEM: GHOST PING DETEKTOR ---
+client.on('messageDelete', async message => {
+    // Ignorujemy wiadomości od botów, brak gildii lub wiadomości bez treści/wzmianek
+    if (message.author?.bot || !message.guild || message.mentions.users.size === 0) return;
+
+    // Pobieramy osoby, które zostały oznaczone
+    const mentionedUsers = message.mentions.users.map(user => user.tag).join(', ');
+
+    // Tworzymy czytelny komunikat o ghost pingu
+    const logEmbed = {
+        color: 0xffcc00,
+        title: '👻 Wykryto Ghost Ping!',
+        fields: [
+            { name: 'Autor wiadomości', value: `${message.author.tag} (${message.author.id})`, inline: true },
+            { name: 'Oznaczone osoby', value: mentionedUsers, inline: true },
+            { name: 'Treść skasowanej wiadomości', value: message.content || '[Brak tekstu / sam embed lub załącznik]' }
+        ],
+        timestamp: new Date().toISOString()
+    };
+
+    // Tutaj wpisz ID swojego kanału logów (możesz też użyć zmiennej środowiskowej, np. process.env.LOG_CHANNEL_ID)
+    const LOG_CHANNEL_ID = ''; 
+    const logChannel = message.guild.channels.cache.get(LOG_CHANNEL_ID);
+
+    if (logChannel) {
+        logChannel.send({ embeds: [logEmbed] }).catch(err => console.error('Błąd wysyłania logu ghost ping:', err));
+    }
+});
+
 
 client.login(BOT_TOKEN);
