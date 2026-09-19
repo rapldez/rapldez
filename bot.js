@@ -15,10 +15,9 @@ const SERVER_ID = '1516145205215232050';
 const CATEGORY_ID = '1550704110691422318'; 
 const YOUR_DISCORD_ID = '920029957739139083';
 
-// TUTAJ WKLEJ ID KANAŁU, NA KTÓRY MAJĄ LECIEĆ ZARCHIWIZOWANE TICKETY
+// ID KANAŁU NA LOGI TICKETÓW
 const LOG_CHANNEL_ID = '1550753070726512730'; 
 
-// ---------------- MONGODB ----------------
 const counterSchema = new mongoose.Schema({
     id: { type: String, default: 'views' },
     count: { type: Number, default: 0 }
@@ -29,10 +28,7 @@ if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
         .then(() => console.log('✅ Połączono z bazą MongoDB!'))
         .catch(err => console.error('❌ Błąd połączenia z MongoDB:', err));
-} else {
-    console.log('⚠️ Brak MONGO_URI! Licznik nie będzie działał.');
 }
-// -----------------------------------------
 
 const client = new Client({ 
     intents: [
@@ -42,6 +38,8 @@ const client = new Client({
         GatewayIntentBits.GuildMembers
     ] 
 });
+
+// --- API ---
 
 app.get('/api/views', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -157,6 +155,42 @@ app.post('/api/kontakt', async (req, res) => {
     }
 });
 
+// Endpoint do zdalnego restartowania bota
+app.post('/api/reboot', (req, res) => {
+    const { password } = req.body;
+    if (password !== 'sigma123') return res.status(403).json({ error: 'Brak uprawnień' });
+
+    res.json({ message: 'Zlecono restart serwera.' });
+    
+    setTimeout(() => {
+        console.log('Zdalny restart przez WWW...');
+        process.exit(1); 
+    }, 1000);
+});
+
+// --- KOMENDY NA DISCORDZIE (Kreator ogłoszeń) ---
+client.on('messageCreate', async message => {
+    if (message.author.bot) return;
+
+    if (message.content.startsWith('!ogloszenie') && message.author.id === YOUR_DISCORD_ID) {
+        // Składnia: !ogloszenie Tytuł | Treść
+        const args = message.content.replace('!ogloszenie', '').trim().split('|');
+        const title = args[0] ? args[0].trim() : 'Ogłoszenie';
+        const text = args[1] ? args[1].trim() : 'Brak treści.';
+
+        const embed = new EmbedBuilder()
+            .setColor('#111214')
+            .setAuthor({ name: `📣 RAPLDEZ • ${title.toUpperCase()}` })
+            .setDescription(`\n${text}\n`)
+            .setFooter({ text: 'rapldez OS • Powiadomienie' })
+            .setTimestamp();
+
+        await message.channel.send({ embeds: [embed] });
+        await message.delete().catch(() => null);
+    }
+});
+
+// --- OBSŁUGA PRZYCISKÓW W TICKETACH ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
@@ -193,13 +227,12 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.customId === 'archive_ticket') {
-        await interaction.reply('📁 Generuję archiwum... Kanał zostanie usunięty za 5 sekund.');
+        await interaction.reply('📁 Generuję archiwum HTML... Kanał zostanie usunięty za 5 sekund.');
         
         try {
             let messages = await interaction.channel.messages.fetch({ limit: 100 });
             messages = Array.from(messages.values()).reverse();
             
-            // Generowanie kodu HTML
             let htmlContent = `
             <!DOCTYPE html>
             <html lang="pl">
@@ -240,15 +273,19 @@ client.on('interactionCreate', async interaction => {
 
             const attachment = new AttachmentBuilder(Buffer.from(htmlContent, 'utf-8'), { name: `archiwum-${interaction.channel.name}.html` });
             
-            // Tworzenie embeda do logów
+            const authorVal = targetId && targetId !== 'brak_id' ? `<@${targetId}>` : '`Z poziomu WWW`';
             const embedLog = new EmbedBuilder()
-                .setColor('#2b2d31')
-                .setAuthor({ name: `📁 Archiwum: ${interaction.channel.name}` })
-                .addFields(
-                    { name: '👤 Utworzył', value: targetId && targetId !== 'brak_id' ? `<@${targetId}>` : 'Z poziomu WWW', inline: true },
-                    { name: '🔒 Zarchiwizował', value: `<@${interaction.user.id}>`, inline: true },
-                    { name: '💬 Wiadomości', value: `${messages.length}`, inline: true }
-                )
+                .setColor('#111214')
+                .setAuthor({ name: '📁 RAPLDEZ • ARCHIWUM TICKETA' })
+                .setDescription(`
+**• 📁 × Informacje o kanale:**
+\`—\` **× Nazwa:** \`${interaction.channel.name}\`
+\`—\` **× Wiadomości:** \`${messages.length}\`
+
+**• 👤 × Informacje o akcji:**
+\`—\` **× Utworzył:** ${authorVal}
+\`—\` **× Zarchiwizował:** <@${interaction.user.id}>
+                `)
                 .setFooter({ text: 'rapldez OS • Logi Zgłoszeń' })
                 .setTimestamp();
 
@@ -257,7 +294,6 @@ client.on('interactionCreate', async interaction => {
             if (logChannel) {
                 await logChannel.send({ embeds: [embedLog], files: [attachment] });
             } else {
-                // Zabezpieczenie: jeśli nie ma kanału logów, wysyła na PW
                 const adminUser = await client.users.fetch(YOUR_DISCORD_ID);
                 await adminUser.send({ content: `⚠️ Nie skonfigurowano ID kanału logów. Archiwum: **${interaction.channel.name}**`, embeds: [embedLog], files: [attachment] });
             }
