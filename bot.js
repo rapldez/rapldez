@@ -76,11 +76,15 @@ const TicketArchive = mongoose.model('TicketArchive', ticketArchiveSchema);
 const pasteSchema = new mongoose.Schema({ shortId: String, content: String, createdAt: String });
 const Paste = mongoose.model('Paste', pasteSchema);
 
-// NOWOŚĆ: Baza ostrzeżeń (Warns)
 const warnSchema = new mongoose.Schema({ userId: String, reason: String, adminId: String, date: String });
 const Warn = mongoose.model('Warn', warnSchema);
 
-if (MONGO_URI) mongoose.connect(MONGO_URI).then(() => console.log('✅ Połączono z MongoDB!')).catch(err => console.error(err));
+let dbStatus = 'Rozłączono';
+if (MONGO_URI) {
+    mongoose.connect(MONGO_URI)
+        .then(() => { dbStatus = '🟢 Połączono (Stabilna)'; console.log('✅ Połączono z MongoDB!'); })
+        .catch(err => { dbStatus = '🔴 Błąd połączenia'; console.error(err); });
+}
 
 const client = new Client({ 
     intents: [
@@ -143,7 +147,73 @@ app.get('/auth/discord/callback', async (req, res) => {
 app.get('/api/check-auth', (req, res) => res.json({ authenticated: (req.session?.user?.id === YOUR_DISCORD_ID), username: req.session?.user?.username }));
 app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({ success: true })));
 
-// --- API STRONY WWW (TERMINAL & EMBED BUILDER) ---
+// --- API STRONY WWW (FORMULARZ KONTAKTOWY, TERMINAL, EMBEDY) ---
+app.get('/api/views', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    try {
+        if (!MONGO_URI) return res.json({ views: 'Brak Bazy' });
+        let counter = await Counter.findOne({ id: 'views' });
+        if (!counter) counter = new Counter({ id: 'views', count: 0 });
+        counter.count += 1;
+        await counter.save();
+        res.json({ views: counter.count });
+    } catch (err) {
+        res.status(500).json({ views: 'Live' });
+    }
+});
+
+// NAPRAWIONY FORMULARZ KONTAKTOWY (TICKET ZE STRONY)
+app.post('/api/kontakt', async (req, res) => {
+    const { nick, subject, message } = req.body;
+    if (!nick || !message || !subject) return res.status(400).json({ error: 'Brakujące dane' });
+
+    try {
+        const guild = client.guilds.cache.get(SERVER_ID);
+        if (!guild) return res.status(500).json({ message: 'Błąd serwera.' });
+
+        const inputClean = nick.toLowerCase().trim();
+        let member = null;
+        try {
+            const searchResults = await guild.members.fetch({ query: inputClean, limit: 10 });
+            member = searchResults.find(m => m.user.username.toLowerCase() === inputClean || (m.user.globalName && m.user.globalName.toLowerCase() === inputClean));
+        } catch (e) {}
+
+        const permissionOverwrites = [{ id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }];
+        if (member) {
+            permissionOverwrites.push({ id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
+        }
+
+        const safeNick = nick.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 16) || 'nieznany';
+        const channelName = `ticket-${safeNick}`;
+        const createdAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+        const topicData = `${member ? member.id : 'brak_id'}\vert{}CREATED:${createdAtStr}`;
+        
+        const newChannel = await guild.channels.create({
+            name: channelName,
+            type: ChannelType.GuildText,
+            parent: CATEGORY_ID,
+            topic: topicData,
+            permissionOverwrites: permissionOverwrites
+        });
+
+        const embed = new EmbedBuilder()
+            .setColor(MAIN_COLOR)
+            .setAuthor({ name: '🎫 RAPLDEZ • ZGŁOSZENIE ZE STRONY' })
+            .setDescription(`**• 👤 Nadawca:** \`${nick}\` (${member ? `<@${member.id}>` : 'Brak na serwerze'})\n**• 📩 Temat:** \`${subject}\`\n**• 🕒 Otwarto:** \`${createdAtStr}\`\n\`\`\`text\n${message}\n\`\`\``)
+            .setFooter({ text: 'rapldez OS • System zgłoszeń' });
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
+            new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj').setStyle(ButtonStyle.Danger).setEmoji('📁')
+        );
+
+        await newChannel.send({ content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie ze strony!`, embeds: [embed], components: [row] });
+        res.status(200).json({ message: 'Zgłoszenie wysłane!' });
+    } catch (error) {
+        res.status(500).json({ message: 'Wystąpił błąd serwera.' });
+    }
+});
+
 app.post('/api/terminal', async (req, res) => {
     const cmd = req.body.command ? req.body.command.trim() : '';
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ output: 'Odmowa dostępu.' });
@@ -182,27 +252,25 @@ app.post('/api/terminal', async (req, res) => {
     return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo]` });
 });
 
-// NOWOŚĆ: Odbieranie żądania z Kreatora Embedów na stronie WWW
 app.post('/api/send-embed', async (req, res) => {
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ error: 'Brak uprawnień roota.' });
     
-    const { channelId, title, description, color, footer } = req.body;
-    
+    const { channelId, title, description, footer } = req.body;
     if (!channelId || !description) return res.status(400).json({ error: 'Wymagane ID kanału oraz opis.' });
 
     try {
         const targetChannel = client.channels.cache.get(channelId);
-        if (!targetChannel) return res.status(404).json({ error: 'Nie znaleziono kanału o tym ID (lub bot go nie widzi).' });
+        if (!targetChannel) return res.status(404).json({ error: 'Nie znaleziono kanału o tym ID.' });
 
         const embed = new EmbedBuilder()
-            .setColor(color || MAIN_COLOR)
+            .setColor(MAIN_COLOR)
             .setDescription(description.replace(/\\n/g, '\n'));
             
         if (title) embed.setTitle(title);
         if (footer) embed.setFooter({ text: footer });
 
         await targetChannel.send({ embeds: [embed] });
-        logToTerminalDiscord('📝 Zdalny Kreator Embedów', `Wysłano nową wiadomość na kanał <#${channelId}>.`);
+        logToTerminalDiscord('📝 Zdalny Kreator Embedów', `Wysłano wiadomość na kanał <#${channelId}>.`);
         res.json({ success: true, message: 'Embed został wysłany!' });
     } catch (err) {
         res.status(500).json({ error: 'Błąd podczas wysyłania embeda.' });
@@ -233,9 +301,6 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- SYSTEM MODERACJI ---
-    
-    // !warn
     if (message.content.startsWith('!warn') && message.member.permissions.has(PermissionsBitField.Flags.KickMembers)) {
         const args = message.content.split(' ');
         const targetUser = message.mentions.users.first();
@@ -243,25 +308,22 @@ client.on('messageCreate', async message => {
         if (!targetUser) return message.reply('Oznacz użytkownika, np. `!warn @user spam`');
         
         await Warn.create({ userId: targetUser.id, reason: reason, adminId: message.author.id, date: new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) });
-        
         message.channel.send({ embeds: [createLogEmbed('⚠️ OSTRZEŻENIE', `Użytkownik <@${targetUser.id}> otrzymał ostrzeżenie.\n**Powód:** ${reason}`)] });
         sendServerLog('⚠️ Nadano ostrzeżenie', `**Admin:** <@${message.author.id}>\n**Ukarany:** <@${targetUser.id}>\n**Powód:** ${reason}`);
     }
 
-    // !kick
     if (message.content.startsWith('!kick') && message.member.permissions.has(PermissionsBitField.Flags.KickMembers)) {
         const args = message.content.split(' ');
         const targetMember = message.mentions.members.first();
         const reason = args.slice(2).join(' ') || 'Brak powodu';
         if (!targetMember) return message.reply('Oznacz użytkownika: `!kick @user powód`');
-        if (!targetMember.kickable) return message.reply('Nie mogę wyrzucić tego użytkownika (ma wyższą rolę).');
+        if (!targetMember.kickable) return message.reply('Nie mogę wyrzucić tego użytkownika.');
 
         await targetMember.kick(reason).catch(() => null);
-        message.channel.send({ embeds: [createLogEmbed('👢 WYRZUCENIE', `<@${targetMember.id}> został wyrzucony z serwera.\n**Powód:** ${reason}`)] });
+        message.channel.send({ embeds: [createLogEmbed('👢 WYRZUCENIE', `<@${targetMember.id}> został wyrzucony.\n**Powód:** ${reason}`)] });
         sendServerLog('👢 Wyrzucenie z serwera (Kick)', `**Admin:** <@${message.author.id}>\n**Ukarany:** <@${targetMember.id}>\n**Powód:** ${reason}`);
     }
 
-    // !ban
     if (message.content.startsWith('!ban') && message.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
         const args = message.content.split(' ');
         const targetMember = message.mentions.members.first();
@@ -270,10 +332,9 @@ client.on('messageCreate', async message => {
         if (!targetMember.bannable) return message.reply('Nie mogę zbanować tego użytkownika.');
 
         await targetMember.ban({ reason }).catch(() => null);
-        message.channel.send({ embeds: [createLogEmbed('🔨 BAN', `<@${targetMember.id}> został zbanowany na zawsze.\n**Powód:** ${reason}`)] });
+        message.channel.send({ embeds: [createLogEmbed('🔨 BAN', `<@${targetMember.id}> został zbanowany.\n**Powód:** ${reason}`)] });
     }
 
-    // !userinfo (Zaciąga dane z bazy o warnach)
     if (message.content.startsWith('!userinfo')) {
         const targetMember = message.mentions.members.first() || message.member;
         const warnCount = await Warn.countDocuments({ userId: targetMember.id });
@@ -311,7 +372,7 @@ client.on('messageCreate', async message => {
 
     if (message.content.startsWith('!setup-verify') && message.author.id === YOUR_DISCORD_ID) {
         const role = message.mentions.roles.first();
-        if (!role) return message.reply('Musisz oznaczyć rolę, którą bot ma nadać, np. `!setup-verify @Użytkownik`');
+        if (!role) return message.reply('Musisz oznaczyć rolę, np. `!setup-verify @Użytkownik`');
         await message.delete().catch(()=>null);
         const embed = new EmbedBuilder().setColor(MAIN_COLOR).setTitle('✅ Weryfikacja konta').setDescription('Witamy na serwerze! Aby uzyskać pełny dostęp do kanałów, musisz potwierdzić, że zapoznałeś się z regulaminem.\n\nKliknij przycisk poniżej, aby odblokować serwer.').setFooter({ text: 'rapldez OS • System bezpieczeństwa' });
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`verify_role_${role.id}`).setLabel('Zweryfikuj się').setStyle(ButtonStyle.Success).setEmoji('🛡️'));
@@ -365,16 +426,43 @@ client.on('roleDelete', r => sendServerLog('🗑️ Usunięcie roli', `Usunięto
 client.on('guildBanAdd', ban => sendServerLog('🔨 Zbanowanie członka', `Zbanowano \`${ban.user.tag}\`.`));
 client.on('guildBanRemove', ban => sendServerLog('🕊️ Odbanowanie członka', `Odbanowano \`${ban.user.tag}\`.`));
 
-// --- STARTUP ---
+// --- SYSTEM JEDNEGO STATUSU (EDYTOCOWANY CO 5 MINUT) ---
 client.once('ready', async () => {
     app.listen(PORT, () => { console.log(`Serwer działa na porcie ${PORT}!`); });
+    
     try {
         const statusChannel = client.channels.cache.get(STATUS_CHANNEL_ID);
         if (statusChannel) {
-            const statusMsg = await statusChannel.send({ embeds: [createLogEmbed('🟢 SYSTEM ONLINE', `Ping: \`${client.ws.ping}ms\``)] });
-            setInterval(() => statusMsg.edit({ embeds: [createLogEmbed('🟢 SYSTEM ONLINE', `Ping: \`${client.ws.ping}ms\``)] }).catch(()=>null), 600000);
+            // Czyszczenie starego śmietnika na kanale statusu, żeby została tylko jedna wiadomość
+            const fetchedMessages = await statusChannel.messages.fetch({ limit: 10 });
+            if (fetchedMessages.size > 0) {
+                await statusChannel.bulkDelete(fetchedMessages, true).catch(() => {});
+            }
+
+            const getStatusEmbed = () => new EmbedBuilder()
+                .setColor(MAIN_COLOR)
+                .setAuthor({ name: '🟢 RAPLDEZ OS • MONITOR SYSTEMU' })
+                .setDescription(
+                    `>>> **• 🤖 Stan Bota:** \`Online (Stabilny)\`\n` +
+                    `**• 🌐 Stan Strony:** \`Online (Render Cloud)\`\n` +
+                    `**• 🗄️ Stan Bazy Danych:** \`${dbStatus}\`\n` +
+                    `**• 📶 Aktualny Ping:** \`${client.ws.ping}ms\``
+                )
+                .setTimestamp()
+                .setFooter({ text: 'rapldez.onrender.com • Automatyczny odświeżacz' });
+
+            const statusMsg = await statusChannel.send({ embeds: [getStatusEmbed()] });
+
+            // Edycja tej samej wiadomości co 5 minut
+            setInterval(async () => {
+                try {
+                    await statusMsg.edit({ embeds: [getStatusEmbed()] });
+                } catch (e) {}
+            }, 5 * 60 * 1000);
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error('Błąd uruchamiania monitora statusu:', e);
+    }
 });
 
 // --- INTERAKCJE (TICKETY I WERYFIKACJA) ---
@@ -444,8 +532,8 @@ client.on('interactionCreate', async interaction => {
             const participantsList = participantsSet.size > 0 ? Array.from(participantsSet).join(', ') : 'Brak interakcji';
 
             let closedAtStr = 'Nie zamknięto ręcznie';
-            const closedPart = parts.find(p => p && p.startsWith('CLOSED:'));
-            if (closedPart) closedAtStr = closedPart.replace('CLOSED:', '');
+            const closedPart = parts.find(p => p && p.startsWith('CREATED:'));
+            if (closedPart) closedAtStr = closedPart.replace('CREATED:', '');
             const archivedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
 
             let htmlContent = `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Archiwum</title><style>body{background:#313338;color:#dbdee1;font-family:sans-serif;padding:20px}.message{margin-bottom:15px}.author{font-weight:bold;color:#f2f3f5}.content{background:#2b2d31;padding:10px;border-radius:6px;display:inline-block}</style></head><body><h2>Archiwum: ${interaction.channel.name}</h2>`;
