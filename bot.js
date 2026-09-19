@@ -26,7 +26,8 @@ const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const REDIRECT_URI = process.env.DISCORD_REDIRECT_URI;
 
 const SERVER_ID = '1516145205215232050'; 
-const CATEGORY_ID = '1550704110691422318'; 
+const CATEGORY_ID = '1516145205936394455'; // Zaktualizowana kategoria głosowa
+const VOICE_CREATOR_CHANNEL_ID = '1516643168479608963'; // ID kanału twórcy głosowego
 const YOUR_DISCORD_ID = '920029957739139083';
 
 // Kanały
@@ -465,14 +466,57 @@ client.on('messageUpdate', (oldMsg, newMsg) => {
     sendServerLog(action, `**Autor:** <@${oldMsg.author?.id}>\n**Kanał:** <#${oldMsg.channel.id}>\n\n**Przed:**\n\`\`\`text\n${oldMsg.content || 'Brak'}\n\`\`\`**Po:**\n\`\`\`text\n${newMsg.content || 'Brak'}\n\`\`\``);
 });
 
-client.on('voiceStateUpdate', (oldState, newState) => {
+// Map do śledzenia dynamicznych kanałów głosowych
+const tempVoiceChannels = new Map();
+
+client.on('voiceStateUpdate', async (oldState, newState) => {
     const user = `<@${newState.id}>`;
+    
+    // Logi głosowe
     if (!oldState.channelId && newState.channelId) sendServerLog('🔊 Dołączenie do kanału głosowego', `Członek ${user} wszedł na kanał <#${newState.channelId}>.`);
     else if (oldState.channelId && !newState.channelId) sendServerLog('🔇 Opuszczenie kanału głosowego', `Członek ${user} opuścił kanał <#${oldState.channelId}>.`);
     else if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) sendServerLog('🔀 Przełączenie kanału głosowego', `Członek ${user} przeszedł z <#${oldState.channelId}> na <#${newState.channelId}>.`);
     else {
         if (!oldState.serverMute && newState.serverMute) sendServerLog('🎙️ Wyciszenie na kanale (Mute)', `${user} wyciszony serwerowo.`);
         if (!oldState.serverDeaf && newState.serverDeaf) sendServerLog('🎧 Ogłuszenie (Deafen)', `${user} ogłuszony serwerowo.`);
+    }
+
+    // System "Stwórz swój głos"
+    try {
+        if (newState.channelId === VOICE_CREATOR_CHANNEL_ID) {
+            const guild = newState.guild;
+            const member = newState.member;
+            const channelName = `🔊 • ${member.user.username}`;
+
+            const createdChannel = await guild.channels.create({
+                name: channelName,
+                type: ChannelType.GuildVoice,
+                parent: CATEGORY_ID,
+                permissionOverwrites: [
+                    {
+                        id: guild.id,
+                        allow: [PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak],
+                    },
+                    {
+                        id: member.id,
+                        allow: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.MuteMembers, PermissionsBitField.Flags.DeafenMembers, PermissionsBitField.Flags.MoveMembers],
+                    }
+                ]
+            });
+
+            await member.voice.setChannel(createdChannel).catch(() => {});
+            tempVoiceChannels.set(createdChannel.id, member.id);
+        }
+
+        if (oldState.channelId && oldState.channelId !== VOICE_CREATOR_CHANNEL_ID) {
+            const oldChannel = oldState.channel;
+            if (oldChannel && tempVoiceChannels.has(oldChannel.id) && oldChannel.members.size === 0) {
+                tempVoiceChannels.delete(oldChannel.id);
+                await oldChannel.delete().catch(() => {});
+            }
+        }
+    } catch (err) {
+        console.error('Błąd systemu kanałów głosowych:', err);
     }
 });
 
