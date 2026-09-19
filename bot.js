@@ -87,7 +87,46 @@ const sendCrashLog = async (error) => {
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('crash_restart').setLabel('Zrestartuj Serwer').setStyle(ButtonStyle.Danger).setEmoji('🔄')
     );
-    await channel.send({ content: `<@${YOUR_DISCORD_ID}> Serwer napotkał problem!`, embeds: [embed], components: [row] }).catch(() => null); };  process.on('uncaughtException', async (err) => {     console.error('Niezłapany błąd:', err);     await sendCrashLog(err); }); process.on('unhandledRejection', async (reason, promise) => {     console.error('Niezłapana obietnica:', reason);     await sendCrashLog(reason); });  // --- OAUTH2 DISCORD LOGIN --- app.get('/auth/discord', (req, res) => {     const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`;     res.redirect(discordAuthUrl); });  app.get('/auth/discord/callback', async (req, res) => {     const code = req.query.code;     if (!code) return res.redirect('/?error=no_code');      try {         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {             method: 'POST',             body: new URLSearchParams({                 client_id: CLIENT_ID,                 client_secret: CLIENT_SECRET,                 grant_type: 'authorization_code',                 code: code,                 redirect_uri: REDIRECT_URI,             }),             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },         });          const tokenData = await tokenResponse.json();         if (!tokenData.access_token) return res.redirect('/?error=bad_token');          const userResponse = await fetch('https://discord.com/api/users/@me', {             headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
+    await channel.send({ content: `<@${YOUR_DISCORD_ID}> Serwer napotkał problem!`, embeds: [embed], components: [row] }).catch(() => null);
+};
+
+process.on('uncaughtException', async (err) => {
+    console.error('Niezłapany błąd:', err);
+    await sendCrashLog(err);
+});
+process.on('unhandledRejection', async (reason, promise) => {
+    console.error('Niezłapana obietnica:', reason);
+    await sendCrashLog(reason);
+});
+
+// --- OAUTH2 DISCORD LOGIN ---
+app.get('/auth/discord', (req, res) => {
+    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`;
+    res.redirect(discordAuthUrl);
+});
+
+app.get('/auth/discord/callback', async (req, res) => {
+    const code = req.query.code;
+    if (!code) return res.redirect('/?error=no_code');
+
+    try {
+        const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+            method: 'POST',
+            body: new URLSearchParams({
+                client_id: CLIENT_ID,
+                client_secret: CLIENT_SECRET,
+                grant_type: 'authorization_code',
+                code: code,
+                redirect_uri: REDIRECT_URI,
+            }),
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        });
+
+        const tokenData = await tokenResponse.json();
+        if (!tokenData.access_token) return res.redirect('/?error=bad_token');
+
+        const userResponse = await fetch('https://discord.com/api/users/@me', {
+            headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
         });
 
         const userData = await userResponse.json();
@@ -97,7 +136,67 @@ const sendCrashLog = async (error) => {
             logToTerminalDiscord(`🔐 **Logowanie:** Udane logowanie do panelu WWW z autoryzacją roota.`);
             return res.redirect('/?login=success');
         } else {
-            logToTerminalDiscord(`⚠️ **Ostrzeżenie:** Zablokowano próbę logowania z niezgodnego konta: \`${userData.username}\` (${userData.id})`);             return res.redirect('/?error=unauthorized');         }     } catch (error) {         res.redirect('/?error=server_error');     } });  app.get('/api/check-auth', (req, res) => {     if (req.session && req.session.user && req.session.user.id === YOUR_DISCORD_ID) {         res.json({ authenticated: true, username: req.session.user.username });     } else {         res.json({ authenticated: false });     } });  app.post('/api/logout', (req, res) => {     req.session.destroy(() => { res.json({ success: true }); }); });  // --- API STRONY --- app.get('/api/views', async (req, res) => {     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');     try {         if (!MONGO_URI) return res.json({ views: 'Brak Bazy' });         let counter = await Counter.findOne({ id: 'views' });         if (!counter) counter = new Counter({ id: 'views', count: 0 });         counter.count += 1;         await counter.save();         res.json({ views: counter.count });     } catch (err) {         res.status(500).json({ views: 'Live' });     } });  app.post('/api/kontakt', async (req, res) => {     const { nick, subject, message } = req.body;     if (!nick \vert{}\vert{} !message \vert{}\vert{} !subject) return res.status(400).json({ error: 'Brakujące dane' });      try {         const guild = client.guilds.cache.get(SERVER_ID);         if (!guild) return res.status(500).json({ message: 'Błąd serwera.' });          const inputClean = nick.toLowerCase().trim();         let member = null;         try {             const searchResults = await guild.members.fetch({ query: inputClean, limit: 10 });             member = searchResults.find(m => m.user.username.toLowerCase() === inputClean \vert{}\vert{} (m.user.globalName && m.user.globalName.toLowerCase() === inputClean));             if (!member) {                 const allMembers = await guild.members.fetch();                  member = allMembers.find(m => m.user.username.toLowerCase() === inputClean);             }         } catch (e) {}          const permissionOverwrites = [{ id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }];         if (member) {             permissionOverwrites.push({ id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });         }          const safeNick = nick.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 16) \vert{}\vert{} 'nieznany';         const channelName = `ticket-${safeNick}`;
+            logToTerminalDiscord(`⚠️ **Ostrzeżenie:** Zablokowano próbę logowania z niezgodnego konta: \`${userData.username}\` (${userData.id})`);
+            return res.redirect('/?error=unauthorized');
+        }
+    } catch (error) {
+        res.redirect('/?error=server_error');
+    }
+});
+
+app.get('/api/check-auth', (req, res) => {
+    if (req.session && req.session.user && req.session.user.id === YOUR_DISCORD_ID) {
+        res.json({ authenticated: true, username: req.session.user.username });
+    } else {
+        res.json({ authenticated: false });
+    }
+});
+
+app.post('/api/logout', (req, res) => {
+    req.session.destroy(() => { res.json({ success: true }); });
+});
+
+// --- API STRONY ---
+app.get('/api/views', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    try {
+        if (!MONGO_URI) return res.json({ views: 'Brak Bazy' });
+        let counter = await Counter.findOne({ id: 'views' });
+        if (!counter) counter = new Counter({ id: 'views', count: 0 });
+        counter.count += 1;
+        await counter.save();
+        res.json({ views: counter.count });
+    } catch (err) {
+        res.status(500).json({ views: 'Live' });
+    }
+});
+
+app.post('/api/kontakt', async (req, res) => {
+    const { nick, subject, message } = req.body;
+    if (!nick || !message || !subject) return res.status(400).json({ error: 'Brakujące dane' });
+
+    try {
+        const guild = client.guilds.cache.get(SERVER_ID);
+        if (!guild) return res.status(500).json({ message: 'Błąd serwera.' });
+
+        const inputClean = nick.toLowerCase().trim();
+        let member = null;
+        try {
+            const searchResults = await guild.members.fetch({ query: inputClean, limit: 10 });
+            member = searchResults.find(m => m.user.username.toLowerCase() === inputClean || (m.user.globalName && m.user.globalName.toLowerCase() === inputClean));
+            if (!member) {
+                const allMembers = await guild.members.fetch(); 
+                member = allMembers.find(m => m.user.username.toLowerCase() === inputClean);
+            }
+        } catch (e) {}
+
+        const permissionOverwrites = [{ id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }];
+        if (member) {
+            permissionOverwrites.push({ id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
+        }
+
+        const safeNick = nick.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 16) || 'nieznany';
+        const channelName = `ticket-${safeNick}`;
         const createdAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
         const topicData = `${member ? member.id : 'brak_id'}\vert{}CREATED:${createdAtStr}`;
         
@@ -112,7 +211,15 @@ const sendCrashLog = async (error) => {
         const embed = new EmbedBuilder()
             .setColor('#111214')
             .setAuthor({ name: '🎫 RAPLDEZ • ZGŁOSZENIE ZE STRONY' })
-            .setDescription(`**• 👤 × Nadawca:** \`${nick}\` (${member ? `<@${member.id}>` : 'Brak na serwerze'})\n**• 📩 × Temat:** \`${subject}\`\n**• 🕒 × Otwarto:** \`${createdAtStr}\`\n\`\`\`text\n${message}\n\`\`\``)             .setFooter({ text: 'rapldez OS • System zgłoszeń' });          const row = new ActionRowBuilder().addComponents(             new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj').setStyle(ButtonStyle.Danger).setEmoji('📁')         );          await newChannel.send({ content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie!`, embeds: [embed], components: [row] });
+            .setDescription(`**• 👤 × Nadawca:** \`${nick}\` (${member ? `<@${member.id}>` : 'Brak na serwerze'})\n**• 📩 × Temat:** \`${subject}\`\n**• 🕒 × Otwarto:** \`${createdAtStr}\`\n\`\`\`text\n${message}\n\`\`\``)
+            .setFooter({ text: 'rapldez OS • System zgłoszeń' });
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
+            new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj').setStyle(ButtonStyle.Danger).setEmoji('📁')
+        );
+
+        await newChannel.send({ content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie!`, embeds: [embed], components: [row] });
         res.status(200).json({ message: 'Zgłoszenie wysłane!' });
     } catch (error) {
         res.status(500).json({ message: 'Wystąpił błąd serwera.' });
@@ -258,7 +365,13 @@ client.on('interactionCreate', async interaction => {
             await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
         }
         const closedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
-        interaction.channel.setTopic(`${targetId}\vert{}CREATED:${createdAtStr}|CLOSED:${closedAtStr}`).catch(() => null);          const reopenRow = new ActionRowBuilder().addComponents(             new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')         );         await interaction.reply({ content: `🔒 Zgłoszenie zamknięte (${closedAtStr}).`, components: [reopenRow] });
+        interaction.channel.setTopic(`${targetId}|CREATED:${createdAtStr}\vert{}CLOSED:${closedAtStr}`).catch(() => null);
+
+        const reopenRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
+            new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
+        );
+        await interaction.reply({ content: `🔒 Zgłoszenie zamknięte (${closedAtStr}).`, components: [reopenRow] });
     }
 
     if (interaction.customId === 'open_ticket') {
@@ -295,7 +408,9 @@ client.on('interactionCreate', async interaction => {
             
             const archivedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
 
-            let htmlContent = `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Archiwum</title><style>body{background:#313338;color:#dbdee1;font-family:sans-serif;padding:20px}.message{margin-bottom:15px}.author{font-weight:bold;color:#f2f3f5}.content{background:#2b2d31;padding:10px;border-radius:6px;display:inline-block}</style></head><body><h2>Archiwum: ${interaction.channel.name}</h2>`;             messages.forEach(m => {                 htmlContent += `<div class="message"><span class="author">${m.author.username}</span> <span style="font-size:11px;color:#949ba4">${m.createdAt.toLocaleString('pl-PL')}</span><br><div class="content">${m.content || '[Media]'}</div></div>`;
+            let htmlContent = `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Archiwum</title><style>body{background:#313338;color:#dbdee1;font-family:sans-serif;padding:20px}.message{margin-bottom:15px}.author{font-weight:bold;color:#f2f3f5}.content{background:#2b2d31;padding:10px;border-radius:6px;display:inline-block}</style></head><body><h2>Archiwum: ${interaction.channel.name}</h2>`;
+            messages.forEach(m => {
+                htmlContent += `<div class="message"><span class="author">${m.author.username}</span> <span style="font-size:11px;color:#949ba4">${m.createdAt.toLocaleString('pl-PL')}</span><br><div class="content">${m.content || '[Media]'}</div></div>`;
             });
             htmlContent += `</body></html>`;
 
