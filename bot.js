@@ -103,7 +103,7 @@ const client = new Client({
 });
 
 const sendCrashLog = async (error) => {
-    const channel = client.channels.cache.get(LOG_CHANNEL_ID);
+    const channel = client.channels.cache.get(TERMINAL_LOG_CHANNEL);
     if (!channel) return;
     const embed = createLogEmbed('⚠️ Krytyczny Błąd Systemu', `Wykryto awarię aplikacji na Renderze. Zrzut:\n\`\`\`js\n${error.stack ? error.stack.substring(0, 3000) : error}\n\`\`\``);
     const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('crash_restart').setLabel('Zrestartuj Serwer').setStyle(ButtonStyle.Danger).setEmoji('🔄'));
@@ -521,7 +521,6 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // Usunięcie restrykcyjnego blokowania administratorów/właściciela, żeby przyciski działały zawsze poprawnie w obie strony
     const topic = interaction.channel.topic || '';
     const parts = topic.split('|');
     let targetId = parts[0] || 'brak_id';
