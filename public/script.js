@@ -28,6 +28,86 @@ document.addEventListener('DOMContentLoaded', () => {
     let baseStatusHtml = 'Offline';
     let activeActivityStart = null;
 
+    // AUDIO WIZUALIZATOR
+    let audioCtx, analyser, source, dataArray, canvasCtx;
+    const visualizerCanvas = document.getElementById('audio-visualizer');
+
+    function initVisualizer() {
+        if (audioCtx || !visualizerCanvas || !bgAudio) return;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        
+        source = audioCtx.createMediaElementSource(bgAudio);
+        source.connect(analyser);
+        analyser.connect(audioCtx.destination);
+        
+        analyser.fftSize = 64;
+        const bufferLength = analyser.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLength);
+        canvasCtx = visualizerCanvas.getContext('2d');
+
+        function drawVisualizer() {
+            requestAnimationFrame(drawVisualizer);
+            analyser.getByteFrequencyData(dataArray);
+            
+            canvasCtx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+            
+            const barWidth = (visualizerCanvas.width / bufferLength) * 2;
+            let barHeight;
+            let x = 0;
+            
+            for(let i = 0; i < bufferLength; i++) {
+                barHeight = (dataArray[i] / 255) * visualizerCanvas.height;
+                canvasCtx.fillStyle = '#23a559';
+                canvasCtx.fillRect(x, visualizerCanvas.height - barHeight, barWidth, barHeight);
+                x += barWidth + 2;
+            }
+        }
+        drawVisualizer();
+    }
+
+    // POGODA SZCZECIN (API Open-Meteo)
+    function fetchWeather() {
+        fetch('https://api.open-meteo.com/v1/forecast?latitude=53.4289&longitude=14.553&current_weather=true')
+        .then(res => res.json())
+        .then(data => {
+            const temp = Math.round(data.current_weather.temperature);
+            const weatherCode = data.current_weather.weathercode;
+            let icon = 'fa-cloud';
+            if(weatherCode === 0) icon = 'fa-sun'; 
+            else if(weatherCode >= 1 && weatherCode <= 3) icon = 'fa-cloud-sun';
+            else if(weatherCode >= 51 && weatherCode <= 67) icon = 'fa-cloud-rain';
+            else if(weatherCode >= 71 && weatherCode <= 77) icon = 'fa-snowflake';
+            else if(weatherCode >= 95) icon = 'fa-bolt';
+            
+            document.getElementById('weather-szczecin').innerHTML = `<i class="fa-solid ${icon}"></i> ${temp}°C`;
+        })
+        .catch(err => console.log('Błąd pogody:', err));
+    }
+    fetchWeather();
+    setInterval(fetchWeather, 15 * 60 * 1000); 
+
+    // TOAST NOTIFICATIONS
+    function showToast(message, type = 'success') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        
+        let icon = type === 'success' ? '<i class="fa-solid fa-check-circle"></i>' : '<i class="fa-solid fa-circle-exclamation"></i>';
+        
+        toast.innerHTML = `${icon} <span>${message}</span>`;
+        container.appendChild(toast);
+        
+        setTimeout(() => { toast.classList.add('show'); }, 10);
+        
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => { toast.remove(); }, 400); 
+        }, 4000);
+    }
+
     const BADGES = {
         NITRO: "https://raw.githubusercontent.com/abrahamtdasilva/awbadges/main/src/badges/nitro.svg",
         HYPE_BRAVERY: "https://raw.githubusercontent.com/abrahamtdasilva/awbadges/main/src/badges/hypesquad_bravery.svg",
@@ -48,7 +128,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     const p = data.t === 'INIT_STATE' || data.t === 'PRESENCE_UPDATE' ? data.d : null;
                     if (p) {
                         if (statusDot) statusDot.className = 'status-dot ' + p.discord_status;
-                        
                         activeActivityStart = null;
                         
                         if (p.spotify) {
@@ -67,7 +146,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             else if (p.discord_status === 'dnd') sTxt = 'Nie przeszkadzać';
                             baseStatusHtml = sTxt;
                         }
-
                         updateStatusDisplay();
 
                         if (p.discord_user && discordAvatar) {
@@ -81,14 +159,12 @@ document.addEventListener('DOMContentLoaded', () => {
                                 badgesContainer.innerHTML = '';
                                 const flags = p.discord_user.public_flags;
                                 let badgeHtml = '';
-                                
                                 if (isAnimated) badgeHtml += `<img src="${BADGES.NITRO}" class="badge-icon" title="Discord Nitro">`;
                                 if (flags & 64) badgeHtml += `<img src="${BADGES.HYPE_BRAVERY}" class="badge-icon" title="HypeSquad Bravery">`;
                                 if (flags & 128) badgeHtml += `<img src="${BADGES.HYPE_BRILLIANCE}" class="badge-icon" title="HypeSquad Brilliance">`;
                                 if (flags & 256) badgeHtml += `<img src="${BADGES.HYPE_BALANCE}" class="badge-icon" title="HypeSquad Balance">`;
                                 if (flags & 512) badgeHtml += `<img src="${BADGES.EARLY_SUPPORTER}" class="badge-icon" title="Early Supporter">`;
                                 if (flags & 4194304) badgeHtml += `<img src="${BADGES.ACTIVE_DEV}" class="badge-icon" title="Active Developer">`;
-
                                 badgesContainer.innerHTML = badgeHtml;
                             }
                         }
@@ -200,6 +276,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (bgAudio) { bgAudio.volume = startVol; bgAudio.play().catch(e=>{}); }
             if (bgVideo) { bgVideo.muted = true; bgVideo.play().catch(e=>{}); }
             
+            initVisualizer(); 
+
             setTimeout(() => {
                 typeWriterTitle();
                 typeAboutMe();
@@ -214,6 +292,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const termOutput = document.getElementById('terminal-output');
     const mainTerminal = document.getElementById('main-terminal');
     const termForm = document.getElementById('terminal-form');
+    const termPrompt = document.getElementById('term-prompt');
+
+    // LOGOWANIE DO TERMINALA
+    let isLoginMode = false;
+    let isAdminLogged = false;
 
     function openTerminalClean(isManual) {
         termOverlay.style.opacity = '1';
@@ -226,10 +309,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div style="color: #23a559;">Nawiązano autoryzowane połączenie.</div>
                 <div>Wpisz 'pomoc', aby wyświetlić listę dostępnych poleceń.</div>
             `;
+            if (isAdminLogged) {
+                termOutput.innerHTML += `<div style="color: #fbc02d;">Jesteś zalogowany jako root. Pełny dostęp.</div>`;
+            }
         } else {
             termOutput.innerHTML = `<div>[ rapldez OS v1.0 ]</div>`;
         }
-        
         setTimeout(() => { termInput.focus(); }, 100);
     }
 
@@ -241,6 +326,9 @@ document.addEventListener('DOMContentLoaded', () => {
         closeTermBtn.addEventListener('click', () => {
             termOverlay.style.opacity = '0';
             termOverlay.style.pointerEvents = 'none';
+            isLoginMode = false;
+            termInput.type = 'text';
+            termPrompt.innerText = 'root@rapldez:';
         });
 
         if (termForm) {
@@ -248,9 +336,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.preventDefault(); 
                 
                 const command = termInput.value.trim().toLowerCase();
+                const rawCommand = termInput.value.trim(); 
                 termInput.value = '';
                 
-                if (command === '') return;
+                if (command === '' && !isLoginMode) return;
+
+                if (isLoginMode) {
+                    const cmdEcho = document.createElement('div');
+                    cmdEcho.innerHTML = `<span class="prompt">Hasło:</span> <span style="color:white;">********</span>`;
+                    termOutput.appendChild(cmdEcho);
+
+                    const response = document.createElement('div');
+                    if (rawCommand === 'sigma123') { 
+                        isAdminLogged = true;
+                        response.innerHTML = `<span style="color:#23a559;">Dostęp przyznany. Witaj, administratorze.</span>`;
+                        showToast("Zalogowano do terminala", "success");
+                    } else {
+                        response.innerHTML = `<span style="color:#f23f42;">Odmowa dostępu. Nieprawidłowe hasło.</span>`;
+                        showToast("Odmowa dostępu", "error");
+                    }
+                    
+                    isLoginMode = false;
+                    termInput.type = 'text';
+                    termPrompt.innerText = 'root@rapldez:';
+                    
+                    response.style.marginBottom = "10px";
+                    termOutput.appendChild(response);
+                    termOutput.scrollTop = termOutput.scrollHeight;
+                    return;
+                }
 
                 const cmdEcho = document.createElement('div');
                 cmdEcho.innerHTML = `<span class="prompt">root@rapldez:</span> <span style="color:white;">${command}</span>`;
@@ -259,15 +373,57 @@ document.addEventListener('DOMContentLoaded', () => {
                 const response = document.createElement('div');
                 
                 switch(command) {
+                    case 'login':
+                        if (isAdminLogged) {
+                            response.innerHTML = `<span style="color:#fbc02d;">Jesteś już zalogowany jako administrator.</span>`;
+                        } else {
+                            isLoginMode = true;
+                            termInput.type = 'password';
+                            termPrompt.innerText = 'Hasło:';
+                            return; 
+                        }
+                        break;
                     case 'pomoc':
-                        response.innerHTML = `
+                        let helpText = `
                             Dostępne polecenia systemowe:<br>
                             &nbsp;&nbsp;<b>setup</b>&nbsp;&nbsp;&nbsp;&nbsp;- specyfikacja sprzętu i roweru<br>
                             &nbsp;&nbsp;<b>ping</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- test opóźnienia do API Discorda<br>
                             &nbsp;&nbsp;<b>zapros</b>&nbsp;&nbsp;&nbsp;- link do zaproszenia na Discord<br>
                             &nbsp;&nbsp;<b>motyw</b>&nbsp;&nbsp;&nbsp;&nbsp;- zmienia motyw terminala<br>
+                            &nbsp;&nbsp;<b>login</b>&nbsp;&nbsp;&nbsp;&nbsp;- autoryzacja deweloperska<br>
                             &nbsp;&nbsp;<b>clear</b>&nbsp;&nbsp;&nbsp;&nbsp;- czyści ekran terminala
                         `;
+                        if (isAdminLogged) {
+                            helpText += `<br><br><span style="color:#fbc02d;">Polecenia administratora:</span><br>
+                            &nbsp;&nbsp;<b>reboot</b>&nbsp;&nbsp;- zdalny restart serwera aplikacji<br>
+                            &nbsp;&nbsp;<b>wyloguj</b>&nbsp;- opuszcza tryb roota`;
+                        }
+                        response.innerHTML = helpText;
+                        break;
+                    case 'wyloguj':
+                        if (isAdminLogged) {
+                            isAdminLogged = false;
+                            response.innerHTML = `<span style="color:#23a559;">Wylogowano pomyślnie.</span>`;
+                            showToast("Wylogowano", "success");
+                        } else {
+                            response.innerHTML = `bash: wyloguj: musisz być zalogowany.`;
+                        }
+                        break;
+                    case 'reboot':
+                        if (isAdminLogged) {
+                            response.innerHTML = `<span style="color:#fbc02d;">Wysyłanie sygnału przerwania do serwera...</span>`;
+                            fetch('/api/reboot', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ password: 'sigma123' })
+                            }).then(() => {
+                                response.innerHTML += `<br><span style="color:#23a559;">Połączenie zerwane. Serwer uruchomi się ponownie za chwilę.</span>`;
+                            }).catch(() => {
+                                response.innerHTML += `<br><span style="color:#f23f42;">Błąd sygnału. Sprawdź konsole.</span>`;
+                            });
+                        } else {
+                            response.innerHTML = `bash: reboot: brak uprawnień. Zaloguj się.`;
+                        }
                         break;
                     case 'setup':
                         response.innerHTML = `
@@ -352,7 +508,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeContactBtn = document.getElementById('close-contact');
     const contactOverlay = document.getElementById('contact-overlay');
     const sendContactBtn = document.getElementById('send-contact-btn');
-    const contactStatus = document.getElementById('contact-status');
 
     if(openContactBtn && contactOverlay) {
         openContactBtn.addEventListener('click', () => {
@@ -362,22 +517,20 @@ document.addEventListener('DOMContentLoaded', () => {
         closeContactBtn.addEventListener('click', () => {
             contactOverlay.style.opacity = '0';
             contactOverlay.style.pointerEvents = 'none';
-            contactStatus.innerText = '';
         });
 
+        // WYSYŁANIE ZGŁOSZENIA + TOASTY
         sendContactBtn.addEventListener('click', () => {
             const nick = document.getElementById('contact-nick').value.trim();
             const subject = document.getElementById('contact-subject').value.trim();
             const message = document.getElementById('contact-message').value.trim();
 
             if(!nick || !message || !subject) {
-                contactStatus.style.color = "#f23f42";
-                contactStatus.innerText = "Wypełnij wszystkie pola!";
+                showToast("Wypełnij wszystkie pola!", "error");
                 return;
             }
 
-            contactStatus.style.color = "#23a559";
-            contactStatus.innerText = "Wysyłanie zgłoszenia...";
+            showToast("Przetwarzanie zgłoszenia...", "success");
             sendContactBtn.disabled = true;
 
             const formData = { nick, subject, message };
@@ -389,14 +542,11 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .then(async res => {
                 const data = await res.json();
-                if (!res.ok) {
-                    throw new Error(data.message || 'Wystąpił błąd');
-                }
+                if (!res.ok) throw new Error(data.message || 'Wystąpił błąd');
                 return data;
             })
             .then(data => {
-                contactStatus.style.color = "#23a559";
-                contactStatus.innerText = data.message || "Zgłoszenie wysłane pomyślnie!";
+                showToast(data.message || "Wysłano pomyślnie!", "success");
                 document.getElementById('contact-nick').value = '';
                 document.getElementById('contact-subject').value = '';
                 document.getElementById('contact-message').value = '';
@@ -404,12 +554,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     contactOverlay.style.opacity = '0';
                     contactOverlay.style.pointerEvents = 'none';
                     sendContactBtn.disabled = false;
-                    contactStatus.innerText = '';
-                }, 2500);
+                }, 2000);
             })
             .catch(err => {
-                contactStatus.style.color = "#f23f42";
-                contactStatus.innerText = err.message;
+                showToast(err.message, "error");
                 sendContactBtn.disabled = false;
             });
         });
@@ -473,12 +621,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if(bgAudio && playPauseBtn && trackProgress && currTimeDisp && totalTimeDisp) {
         playPauseBtn.addEventListener('click', () => {
+            initVisualizer(); 
             if(bgAudio.paused) { bgAudio.play(); playPauseBtn.className = "fa-solid fa-pause"; } 
             else { bgAudio.pause(); playPauseBtn.className = "fa-solid fa-play"; }
         });
 
         if(prevTrackBtn) {
             prevTrackBtn.addEventListener('click', () => {
+                initVisualizer();
                 bgAudio.currentTime = 0;
                 bgAudio.play().catch(e=>{});
                 playPauseBtn.className = "fa-solid fa-pause";
@@ -487,6 +637,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if(nextTrackBtn) {
             nextTrackBtn.addEventListener('click', () => {
+                initVisualizer();
                 bgAudio.currentTime = 0;
                 bgAudio.play().catch(e=>{});
                 playPauseBtn.className = "fa-solid fa-pause";
