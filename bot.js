@@ -562,6 +562,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.channel.setName(`zgłoszenie-${ticketNumber}`).catch(() => null);
         }, 1000);
 
+        // Poprawka: przywrócenie cyklicznego przycisku zamykania
         const closeRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
