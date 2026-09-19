@@ -14,9 +14,35 @@
         .toast.error i { color: #f23f42; font-size: 18px; }
         .weather-widget { display: inline-flex; align-items: center; gap: 6px; color: #a0a0a0; margin-left: 8px; }
         
-        .auth-bar { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; font-size: 13px; }
-        .discord-login-btn { background: #5865F2; color: white; padding: 6px 12px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-flex; align-items: center; gap: 6px; }
-        .discord-login-btn:hover { background: #4752C4; }
+        /* Pasek logowania i mały przycisk Admin */
+        .auth-bar { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; font-size: 12px; }
+        .admin-btn { background: #2b2d31; color: #b5bac1; border: 1px solid rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 4px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; transition: all 0.2s; }
+        .admin-btn:hover { background: #5865F2; color: #fff; border-color: transparent; }
+
+        /* Poprawka warstw formularza kontaktowego */
+        #contact-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(5px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 9998;
+        }
+        .contact-window {
+            background: #111214;
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 20px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            z-index: 9999;
+        }
     </style>
 </head>
 <body>
@@ -37,7 +63,6 @@
                 <span>root@rapldez:</span>
                 <i class="fa-solid fa-xmark" id="close-terminal"></i>
             </div>
-            <!-- Pasek autoryzacji Discord OAuth2 wewnątrz terminala -->
             <div id="auth-bar" class="auth-bar">
                 <span id="auth-status-text">Sprawdzanie uprawnień...</span>
                 <div id="auth-action-container"></div>
@@ -52,16 +77,16 @@
 
     <div id="contact-overlay">
         <div class="contact-window">
-            <div class="contact-header">
+            <div class="contact-header" style="display:flex; justify-content:space-between; margin-bottom:15px; color:#fff; font-weight:bold;">
                 <span>Formularz Kontaktowy</span>
-                <i class="fa-solid fa-xmark" id="close-contact"></i>
+                <i class="fa-solid fa-xmark" id="close-contact" style="cursor:pointer;"></i>
             </div>
-            <div class="contact-body">
-                <input type="text" id="contact-nick" placeholder="Podaj swój nick" required>
-                <input type="text" id="contact-subject" placeholder="Temat kontaktu" required>
-                <textarea id="contact-message" placeholder="Treść wiadomości..." rows="4" required></textarea>
-                <button id="send-contact-btn">Wyślij zgłoszenie</button>
-                <div class="contact-disclaimer">Wiadomość trafia bezpośrednio na mój serwer Discord.</div>
+            <div class="contact-body" style="display:flex; flex-direction:column; gap:10px;">
+                <input type="text" id="contact-nick" placeholder="Podaj swój nick / ID" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none;" required>
+                <input type="text" id="contact-subject" placeholder="Temat kontaktu" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none;" required>
+                <textarea id="contact-message" placeholder="Treść wiadomości..." rows="4" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none; resize:none;" required></textarea>
+                <button id="send-contact-btn" style="background:#5865F2; color:#fff; border:none; padding:10px; border-radius:6px; font-weight:bold; cursor:pointer;">Wyślij zgłoszenie</button>
+                <div class="contact-disclaimer" style="font-size:11px; color:#949ba4; text-align:center;">Wiadomość trafia bezpośrednio na mój serwer Discord.</div>
             </div>
         </div>
     </div>
