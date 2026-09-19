@@ -74,6 +74,128 @@ const client = new Client({
     ] 
 });
 
+// =========================================================
+// PANEL WWW I KREATOR EMBEDÓW BEZPOŚREDNIO W PLIKU BOTA
+// =========================================================
+app.get('/panel', (req, res) => {
+    let channelOptions = '';
+    if (client.isReady()) {
+        client.guilds.cache.forEach(guild => {
+            guild.channels.cache.forEach(channel => {
+                if (channel.type === 0) { // Tylko kanały tekstowe
+                    channelOptions += `<option value="${channel.id}">${guild.name} / #${channel.name}</option>`;
+                }
+            });
+        });
+    }
+
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="pl">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+            <title>Centrum Dowodzenia - rapldez</title>
+            <style>
+                :root { --bg-main: #121214; --bg-card: #18181b; --border-color: #27272a; --accent: #5865F2; --text-main: #f4f4f5; --text-muted: #a1a1aa; --terminal-bg: #09090b; --terminal-text: #22c55e; }
+                body { background-color: var(--bg-main); color: var(--text-main); font-family: 'Inter', sans-serif; margin: 0; padding: 15px; }
+                header { display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); border: 1px solid var(--border-color); padding: 15px 20px; border-radius: 12px; margin-bottom: 20px; }
+                h1 { color: var(--text-main); margin: 0; font-size: 18px; font-weight: 600; }
+                .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+                .card { background: var(--bg-card); border: 1px solid var(--border-color); padding: 20px; border-radius: 12px; }
+                .card h3 { margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; font-size: 16px; }
+                .form-group { margin-bottom: 12px; }
+                label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+                input, textarea, select { width: 100%; background: var(--terminal-bg); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+                textarea { resize: vertical; height: 80px; }
+                .discord-embed-preview { background: #2b2d31; border-left: 4px solid #5865F2; padding: 12px; border-radius: 4px; margin-top: 15px; font-size: 13px; }
+                .embed-title { font-weight: bold; margin-bottom: 5px; }
+                .embed-desc { color: #dcddde; white-space: pre-wrap; word-break: break-all; }
+                .btn { background: var(--accent); color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 10px; }
+                .btn-success { background: #23a55a; }
+                .terminal-container { grid-column: 1 / -1; }
+                .terminal { background: var(--terminal-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; height: 250px; overflow-y: auto; font-family: monospace; font-size: 12px; color: var(--terminal-text); line-height: 1.5; }
+                .terminal div { margin-bottom: 4px; white-space: pre-wrap; word-break: break-all; }
+            </style>
+        </head>
+        <body>
+            <header>
+                <h1>🛡️ Centrum Dowodzenia Botem</h1>
+                <button class="btn" style="width: auto; margin: 0; padding: 6px 12px;" onclick="location.reload()">Odśwież Panel</button>
+            </header>
+            
+            <div class="grid">
+                <div class="card">
+                    <h3>Kreator Embedów</h3>
+                    <form action="/send-embed" method="POST">
+                        <div class="form-group">
+                            <label>Wybierz kanał docelowy</label>
+                            <select name="channelId">
+                                ${channelOptions || '<option>Brak kanałów (poczekaj na połączenie bota)</option>'}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Tytuł embeda</label>
+                            <input type="text" name="title" id="embedTitleInput" placeholder="Wpisz tytuł..." oninput="updatePreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>Treść wiadomości</label>
+                            <textarea name="description" id="embedDescInput" placeholder="Wpisz treść..." oninput="updatePreview()"></textarea>
+                        </div>
+                        
+                        <label>Podgląd:</label>
+                        <div class="discord-embed-preview">
+                            <div class="embed-title" id="prevTitle">Twój tytuł...</div>
+                            <div class="embed-desc" id="prevDesc">Tutaj pojawi się treść wiadomości...</div>
+                        </div>
+
+                        <button type="submit" class="btn btn-success">🚀 Wyślij na Discorda</button>
+                    </form>
+                </div>
+
+                <div class="card terminal-container">
+                    <h3>Terminal / Logi Serwera na Żywo</h3>
+                    <div class="terminal" id="terminal-box">
+                        ${liveLogs.length > 0 ? liveLogs.map(log => `<div>${log}</div>`).join('') : '<div>Oczekiwanie na logi...</div>'}
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                const term = document.getElementById('terminal-box');
+                term.scrollTop = term.scrollHeight;
+
+                function updatePreview() {
+                    document.getElementById('prevTitle').innerText = document.getElementById('embedTitleInput').value || 'Twój tytuł...';
+                    document.getElementById('prevDesc').innerText = document.getElementById('embedDescInput').value || 'Tutaj pojawi się treść wiadomości...';
+                }
+            </script>
+        </body>
+        </html>
+    `);
+});
+
+app.post('/send-embed', express.urlencoded({ extended: true }), async (req, res) => {
+    const { channelId, title, description } = req.body;
+    try {
+        const channel = await client.channels.fetch(channelId);
+        if (channel && channel.isTextBased()) {
+            await channel.send({
+                embeds: [{
+                    color: 0x5865F2,
+                    title: title || undefined,
+                    description: description || undefined,
+                    timestamp: new Date().toISOString()
+                }]
+            });
+            console.log(`[PANEL] Wysłano embed na kanał ID: ${channelId}`);
+        }
+    } catch (err) {
+        console.error('[BŁĄD PANELU] Nie udało się wysłać embeda:', err);
+    }
+    res.redirect('/panel');
+});
+
 // --- FUNKCJE POMOCNICZE ---
 const createLogEmbed = (title, desc) => new EmbedBuilder().setColor(MAIN_COLOR).setAuthor({ name: title }).setDescription(desc).setTimestamp();
 
@@ -106,7 +228,7 @@ async function isVPN(ip) {
     } catch (e) { return false; }
 }
 
-// --- MONGODB SCHEMAS ---
+// --- MONGODB ---
 const counterSchema = new mongoose.Schema({ id: { type: String, default: 'views' }, count: { type: Number, default: 0 } });
 const Counter = mongoose.model('Counter', counterSchema);
 
@@ -156,7 +278,7 @@ const sendCrashLog = async (error) => {
 process.on('uncaughtException', async (err) => { console.error(err); await sendCrashLog(err); });
 process.on('unhandledRejection', async (reason) => { console.error(reason); await sendCrashLog(reason); });
 
-// --- ENDPOINTY STRONY I API ---
+// --- AUTH DISCORD ---
 app.get('/auth/discord', (req, res) => res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`));
 
 app.get('/auth/discord/callback', async (req, res) => {
@@ -288,18 +410,47 @@ app.get('/p/:id', async (req, res) => {
     res.send(paste.content);
 });
 
-// --- PRZYWRÓCONE, ZAAWANSOWANE API TERMINALA I EMBEDÓW ---
+// --- PRZYWRÓCONE, ZAAWANSOWANE API TERMINALA I EMBEDÓW (Z ZABEZPIECZENIAMI) ---
 
 app.post('/api/terminal', async (req, res) => {
     const cmd = req.body.command ? req.body.command.trim() : '';
-    if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ output: 'Odmowa dostępu.' });
+    
+    // Terminal dostępny dla każdego zalogowanego, ale polecenia są weryfikowane
+    if (!req.session || !req.session.user) {
+        return res.status(403).json({ output: 'Odmowa dostępu. Musisz się zalogować przez Discord, aby użyć terminala.' });
+    }
 
-    logToTerminalDiscord('⌨️ Wykonano polecenie WWW', `**Komenda:** \`${cmd || '[Puste]'}\``);
+    const isAdmin = req.session.user.id === YOUR_DISCORD_ID;
     const cmdArgs = cmd.split(' ');
     const cmdLower = cmdArgs[0].toLowerCase();
 
-    if (cmdLower === 'sysinfo') return res.json({ output: `Uptime: ${Math.floor(process.uptime())}s | RAM: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB \vert{} Ping:${client.ws.ping}ms` });
+    // Logowanie akcji na Discorda w zależności od uprawnień
+    if (isAdmin) {
+        logToTerminalDiscord('⌨️ Wykonano polecenie WWW', `**Admin:** \`${req.session.user.username}\`\n**Komenda:** \`${cmd || '[Puste]'}\``);
+    } else {
+        logToTerminalDiscord('⌨️ Użycie terminala (User)', `**User:** \`${req.session.user.username}\`\n**Komenda:** \`${cmd || '[Puste]'}\``);
+    }
+
+    // --- KOMENDA: POMOC ---
+    if (cmdLower === 'pomoc' || cmdLower === 'help') {
+        if (isAdmin) {
+            return res.json({ output: '=== DOSTĘPNE KOMENDY (ADMIN) ===\n- pomoc : Wyświetla tę listę\n- sysinfo : Informacje o zasobach (RAM, Ping)\n- db stats : Statystyki bazy danych\n- paste [kod] : Zapisuje snippet kodu\n- bot status [tekst] : Zmienia status bota na Discordzie\n- search [słowo] : Szuka słowa w archiwum ticketów\n- giveaway [id_kanału] [minuty] [nagroda] : Startuje konkurs' });
+        } else {
+            return res.json({ output: '=== DOSTĘPNE KOMENDY (UŻYTKOWNIK) ===\n- pomoc : Wyświetla tę listę\n- sysinfo : Sprawdza techniczny stan działania serwera\n\n[!] Dostęp do pozostałych komend terminala wymaga uprawnień ROOT.' });
+        }
+    }
+
+    // --- KOMENDY PUBLICZNE ---
+    if (cmdLower === 'sysinfo') {
+        return res.json({ output: `Uptime: ${Math.floor(process.uptime())}s | RAM: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB | Ping:${client.ws.ping}ms` });
+    }
     
+    // --- BLOKADA ZAAWANSOWANYCH KOMEND DLA NIE-ADMINÓW ---
+    if (!isAdmin) {
+        return res.json({ output: `[BŁĄD] Brak uprawnień ROOT do wykonania polecenia "${cmdLower}". Wpisz "pomoc", aby zobaczyć dozwolone komendy.` });
+    }
+
+    // --- KOMENDY TYLKO DLA ADMINA ---
     if (cmdLower === 'db' && cmdArgs[1] === 'stats') {
         const tickCount = await TicketArchive.countDocuments();
         const views = await Counter.findOne({ id: 'views' });
@@ -364,7 +515,7 @@ app.post('/api/terminal', async (req, res) => {
         return res.json({ output: `Wystartowano giveaway na kanale <#${channelId}> na ${minutes} minut. Nagroda: ${prize}` });
     }
 
-    return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo], giveaway [kanał] [minuty] [nagroda]` });
+    return res.json({ output: `Nie rozpoznano polecenia. Wpisz 'pomoc', aby zobaczyć dostępne komendy.` });
 });
 
 app.get('/api/fetch-message/:channelId/:messageId', async (req, res) => {
@@ -488,128 +639,6 @@ app.post('/api/send-embed', async (req, res) => {
     }
 });
 
-// =========================================================
-// NOWY PANEL WWW (Dla strony /panel z zablokowanym zoomem)
-// =========================================================
-app.get('/panel', (req, res) => {
-    let channelOptions = '';
-    if (client.isReady()) {
-        client.guilds.cache.forEach(guild => {
-            guild.channels.cache.forEach(channel => {
-                if (channel.type === 0) { 
-                    channelOptions += `<option value="${channel.id}">${guild.name} / #${channel.name}</option>`;
-                }
-            });
-        });
-    }
-
-    res.send(`
-        <!DOCTYPE html>
-        <html lang="pl">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-            <title>Centrum Dowodzenia - rapldez</title>
-            <style>
-                :root { --bg-main: #121214; --bg-card: #18181b; --border-color: #27272a; --accent: #5865F2; --text-main: #f4f4f5; --text-muted: #a1a1aa; --terminal-bg: #09090b; --terminal-text: #22c55e; }
-                body { background-color: var(--bg-main); color: var(--text-main); font-family: 'Inter', sans-serif; margin: 0; padding: 15px; }
-                header { display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); border: 1px solid var(--border-color); padding: 15px 20px; border-radius: 12px; margin-bottom: 20px; }
-                h1 { color: var(--text-main); margin: 0; font-size: 18px; font-weight: 600; }
-                .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
-                .card { background: var(--bg-card); border: 1px solid var(--border-color); padding: 20px; border-radius: 12px; }
-                .card h3 { margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; font-size: 16px; }
-                .form-group { margin-bottom: 12px; }
-                label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
-                input, textarea, select { width: 100%; background: var(--terminal-bg); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
-                textarea { resize: vertical; height: 80px; }
-                .discord-embed-preview { background: #2b2d31; border-left: 4px solid #5865F2; padding: 12px; border-radius: 4px; margin-top: 15px; font-size: 13px; }
-                .embed-title { font-weight: bold; margin-bottom: 5px; }
-                .embed-desc { color: #dcddde; white-space: pre-wrap; word-break: break-all; }
-                .btn { background: var(--accent); color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 10px; }
-                .btn-success { background: #23a55a; }
-                .terminal-container { grid-column: 1 / -1; }
-                .terminal { background: var(--terminal-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; height: 250px; overflow-y: auto; font-family: monospace; font-size: 12px; color: var(--terminal-text); line-height: 1.5; }
-                .terminal div { margin-bottom: 4px; white-space: pre-wrap; word-break: break-all; }
-            </style>
-        </head>
-        <body>
-            <header>
-                <h1>🛡️ Centrum Dowodzenia Botem</h1>
-                <button class="btn" style="width: auto; margin: 0; padding: 6px 12px;" onclick="location.reload()">Odśwież Panel</button>
-            </header>
-            
-            <div class="grid">
-                <div class="card">
-                    <h3>Kreator Embedów</h3>
-                    <form action="/send-embed" method="POST">
-                        <div class="form-group">
-                            <label>Wybierz kanał docelowy</label>
-                            <select name="channelId">
-                                ${channelOptions || '<option>Brak kanałów (poczekaj na połączenie bota)</option>'}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Tytuł embeda</label>
-                            <input type="text" name="title" id="embedTitleInput" placeholder="Wpisz tytuł..." oninput="updatePreview()">
-                        </div>
-                        <div class="form-group">
-                            <label>Treść wiadomości</label>
-                            <textarea name="description" id="embedDescInput" placeholder="Wpisz treść..." oninput="updatePreview()"></textarea>
-                        </div>
-                        
-                        <label>Podgląd:</label>
-                        <div class="discord-embed-preview">
-                            <div class="embed-title" id="prevTitle">Twój tytuł...</div>
-                            <div class="embed-desc" id="prevDesc">Tutaj pojawi się treść wiadomości...</div>
-                        </div>
-
-                        <button type="submit" class="btn btn-success">🚀 Wyślij na Discorda</button>
-                    </form>
-                </div>
-
-                <div class="card terminal-container">
-                    <h3>Terminal / Logi Serwera na Żywo</h3>
-                    <div class="terminal" id="terminal-box">
-                        ${liveLogs.length > 0 ? liveLogs.map(log => `<div>${log}</div>`).join('') : '<div>Oczekiwanie na logi...</div>'}
-                    </div>
-                </div>
-            </div>
-
-            <script>
-                const term = document.getElementById('terminal-box');
-                term.scrollTop = term.scrollHeight;
-
-                function updatePreview() {
-                    document.getElementById('prevTitle').innerText = document.getElementById('embedTitleInput').value || 'Twój tytuł...';
-                    document.getElementById('prevDesc').innerText = document.getElementById('embedDescInput').value || 'Tutaj pojawi się treść wiadomości...';
-                }
-            </script>
-        </body>
-        </html>
-    `);
-});
-
-app.post('/send-embed', express.urlencoded({ extended: true }), async (req, res) => {
-    const { channelId, title, description } = req.body;
-    try {
-        const channel = await client.channels.fetch(channelId);
-        if (channel && channel.isTextBased()) {
-            await channel.send({
-                embeds: [{
-                    color: 0x5865F2,
-                    title: title || undefined,
-                    description: description || undefined,
-                    timestamp: new Date().toISOString()
-                }]
-            });
-            console.log(`[PANEL] Wysłano embed na kanał ID: ${channelId}`);
-        }
-    } catch (err) {
-        console.error('[BŁĄD PANELU] Nie udało się wysłać embeda:', err);
-    }
-    res.redirect('/panel');
-});
-
 // Map do śledzenia wiadomości (Anty-Spam)
 const userSpamMap = new Map();
 const SPAM_LIMIT = 5; 
@@ -699,6 +728,7 @@ client.on('messageCreate', async message => {
         }
     }
 
+    // --- KOMENDA: KLONOWANIE UPRAWNIEŃ KANAŁÓW (!sync-perms) ---
     if (message.content.startsWith('!sync-perms') && message.author.id === YOUR_DISCORD_ID) {
         const mentionedChannels = Array.from(message.mentions.channels.values());
         const sourceChannel = mentionedChannels[0];
@@ -740,6 +770,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
+    // --- KOMENDA: INTERAKTYWNA ANKIETA Z CZASEM (!poll [minuty] | [pytanie] | [opcja1] | [opcja2]) ---
     if (message.content.startsWith('!poll') && message.author.id === YOUR_DISCORD_ID) {
         const argsText = message.content.substring(5).trim();
         const parts = argsText.split('|').map(p => p.trim()).filter(Boolean);
@@ -754,7 +785,7 @@ client.on('messageCreate', async message => {
         }
 
         const question = parts[1];
-        const options = parts.slice(2, 7);
+        const options = parts.slice(2, 7); // Maksymalnie 5 opcji
 
         if (options.length < 2) {
             return message.reply('❌ Ankieta musi mieć przynajmniej 2 opcje.');
