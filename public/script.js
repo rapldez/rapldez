@@ -367,13 +367,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         sendContactBtn.addEventListener('click', () => {
             const nick = document.getElementById('contact-nick').value.trim();
-            const discord = document.getElementById('contact-discord').value.trim();
             const subject = document.getElementById('contact-subject').value.trim();
             const message = document.getElementById('contact-message').value.trim();
 
             if(!nick || !message || !subject) {
                 contactStatus.style.color = "#f23f42";
-                contactStatus.innerText = "Wypełnij wymagane pola (Nick, Temat, Wiadomość)!";
+                contactStatus.innerText = "Wypełnij wszystkie pola!";
                 return;
             }
 
@@ -381,7 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
             contactStatus.innerText = "Wysyłanie zgłoszenia...";
             sendContactBtn.disabled = true;
 
-            const formData = { nick, discordId: discord, subject, message };
+            const formData = { nick, subject, message };
 
             fetch('/api/kontakt', {
                 method: 'POST',
@@ -392,7 +391,6 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(data => {
                 contactStatus.innerText = "Zgłoszenie wysłane pomyślnie!";
                 document.getElementById('contact-nick').value = '';
-                document.getElementById('contact-discord').value = '';
                 document.getElementById('contact-subject').value = '';
                 document.getElementById('contact-message').value = '';
                 setTimeout(() => {
