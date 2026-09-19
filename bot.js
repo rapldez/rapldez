@@ -265,10 +265,11 @@ app.post('/api/terminal', async (req, res) => {
     return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo]` });
 });
 
+// ENDPOINT WYSYŁANIA EMBEDÓW Z PRZYCISKAMI
 app.post('/api/send-embed', async (req, res) => {
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ error: 'Brak uprawnień roota.' });
     
-    const { channelId, content, authorName, authorUrl, authorIcon, title, description, color, image, thumbnail, footer, footerIcon, timestamp } = req.body;
+    const { channelId, content, authorName, authorUrl, authorIcon, title, description, color, image, thumbnail, footer, footerIcon, timestamp, buttons } = req.body;
     if (!channelId || (!description && !title && !content)) return res.status(400).json({ error: 'Wymagane ID kanału oraz treść embedu.' });
 
     try {
@@ -276,7 +277,6 @@ app.post('/api/send-embed', async (req, res) => {
         if (!targetChannel) return res.status(404).json({ error: 'Nie znaleziono kanału o tym ID.' });
 
         const embed = new EmbedBuilder();
-
         if (color) embed.setColor(color);
         if (title) embed.setTitle(title);
         if (description) embed.setDescription(description.replace(/\\n/g, '\n'));
@@ -291,26 +291,44 @@ app.post('/api/send-embed', async (req, res) => {
 
         if (image) embed.setImage(image);
         if (thumbnail) embed.setThumbnail(thumbnail);
-
         if (footer || footerIcon) {
-            embed.setFooter({
-                text: footer || '',
-                ...(footerIcon && { iconURL: footerIcon })
-            });
+            embed.setFooter({ text: footer || '', ...(footerIcon && { iconURL: footerIcon }) });
         }
-
         if (timestamp) embed.setTimestamp();
 
         const payload = {};
         if (content) payload.content = content.replace(/\\n/g, '\n');
         if (description || title || authorName) payload.embeds = [embed];
 
+        if (buttons && buttons.length > 0) {
+            const row = new ActionRowBuilder();
+            buttons.forEach((btn, idx) => {
+                let style = ButtonStyle.Primary;
+                if (btn.style === 'SECONDARY') style = ButtonStyle.Secondary;
+                if (btn.style === 'SUCCESS') style = ButtonStyle.Success;
+                if (btn.style === 'DANGER') style = ButtonStyle.Danger;
+                if (btn.style === 'LINK') style = ButtonStyle.Link;
+
+                const bBuilder = new ButtonBuilder()
+                    .setLabel(btn.label || `Przycisk ${idx+1}`)
+                    .setStyle(style);
+
+                if (style === ButtonStyle.Link) {
+                    bBuilder.setURL(btn.value || 'https://discord.com');
+                } else {
+                    bBuilder.setCustomId(`custom_btn_${Date.now()}_${idx}`);
+                }
+                row.addComponents(bBuilder);
+            });
+            payload.components = [row];
+        }
+
         await targetChannel.send(payload);
-        logToTerminalDiscord('📝 Zaawansowany Kreator Embedów', `Wysłano wiadomość na kanał <#${channelId}>.`);
-        res.json({ success: true, message: 'Embed został wysłany!' });
+        logToTerminalDiscord('📝 Zaawansowany Kreator z Przyciskami', `Wysłano wiadomość na kanał <#${channelId}>.`);
+        res.json({ success: true, message: 'Wiadomość z embedem i przyciskami wysłana!' });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Błąd podczas wysyłania embeda.' });
+        res.status(500).json({ error: 'Błąd podczas wysyłania.' });
     }
 });
 
@@ -494,8 +512,13 @@ client.once('ready', async () => {
     }
 });
 
-// --- INTERAKCJE (TICKETY I WERYFIKACJA) ---
+// --- INTERAKCJE (TICKETY, WERYFIKACJA I PRZYCISKI) ---
 client.on('interactionCreate', async interaction => {
+    if (interaction.isButton() && interaction.customId.startsWith('custom_btn_')) {
+        await interaction.reply({ content: 'Przycisk interaktywny wygenerowany z panelu.', ephemeral: true });
+        return;
+    }
+
     if (!interaction.isButton()) return;
 
     if (interaction.customId.startsWith('verify_role_')) {
