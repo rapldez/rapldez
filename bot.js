@@ -279,11 +279,57 @@ app.post('/api/terminal', async (req, res) => {
     return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo]` });
 });
 
-// ENDPOINT WYSYŁANIA EMBEDÓW Z PRZYCISKAMI I LOGOWANIEM
+// --- NOWY ENDPOINT: POBIERANIE WIADOMOŚCI DO EDYCJI ---
+app.get('/api/fetch-message/:channelId/:messageId', async (req, res) => {
+    if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ error: 'Brak uprawnień roota.' });
+    try {
+        const channel = client.channels.cache.get(req.params.channelId);
+        if (!channel) return res.status(404).json({ error: 'Nie znaleziono kanału.' });
+        const msg = await channel.messages.fetch(req.params.messageId);
+        if (!msg) return res.status(404).json({ error: 'Nie znaleziono wiadomości.' });
+
+        const embed = msg.embeds[0] || {};
+        const data = {
+            content: msg.content || '',
+            authorName: embed.author?.name || '',
+            authorUrl: embed.author?.url || '',
+            authorIcon: embed.author?.iconURL || '',
+            title: embed.title || '',
+            description: embed.description || '',
+            color: embed.color ? `#${embed.color.toString(16).padStart(6, '0')}` : '#024442',
+            image: embed.image?.url || '',
+            thumbnail: embed.thumbnail?.url || '',
+            footer: embed.footer?.text || '',
+            footerIcon: embed.footer?.iconURL || '',
+            timestamp: !!embed.timestamp,
+            buttons: []
+        };
+
+        if (msg.components && msg.components.length > 0 && msg.components[0].components) {
+            msg.components[0].components.forEach(btn => {
+                let style = 'PRIMARY';
+                if (btn.style === 2) style = 'SECONDARY';
+                if (btn.style === 3) style = 'SUCCESS';
+                if (btn.style === 4) style = 'DANGER';
+                if (btn.style === 5) style = 'LINK';
+                data.buttons.push({
+                    label: btn.label || '',
+                    style: style,
+                    value: btn.url || btn.customId || ''
+                });
+            });
+        }
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: 'Nie można pobrać wiadomości (sprawdź ID).' });
+    }
+});
+
+// ENDPOINT WYSYŁANIA I EDYCJI EMBEDÓW
 app.post('/api/send-embed', async (req, res) => {
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ error: 'Brak uprawnień roota.' });
     
-    const { channelId, content, authorName, authorUrl, authorIcon, title, description, color, image, thumbnail, footer, footerIcon, timestamp, buttons } = req.body;
+    const { channelId, messageId, content, authorName, authorUrl, authorIcon, title, description, color, image, thumbnail, footer, footerIcon, timestamp, buttons } = req.body;
     if (!channelId || (!description && !title && !content)) return res.status(400).json({ error: 'Wymagane ID kanału oraz treść embedu.' });
 
     try {
@@ -312,7 +358,7 @@ app.post('/api/send-embed', async (req, res) => {
 
         const payload = {};
         if (content) payload.content = content.replace(/\\n/g, '\n');
-        if (description || title || authorName) payload.embeds = [embed];
+        if (description || title || authorName || image || thumbnail || footer) payload.embeds = [embed];
 
         if (buttons && buttons.length > 0) {
             const row = new ActionRowBuilder();
@@ -335,14 +381,24 @@ app.post('/api/send-embed', async (req, res) => {
                 row.addComponents(bBuilder);
             });
             payload.components = [row];
+        } else {
+            payload.components = [];
         }
 
-        await targetChannel.send(payload);
-        logToTerminalDiscord('📝 Kreator Embedów', `Użytkownik **${req.session.user.username}** wysłał embed z przyciskami na kanał <#${channelId}>.`);
-        res.json({ success: true, message: 'Wiadomość z embedem i przyciskami wysłana!' });
+        if (messageId) {
+            const msgToEdit = await targetChannel.messages.fetch(messageId);
+            if (!msgToEdit) return res.status(404).json({ error: 'Nie znaleziono wiadomości o tym ID na podanym kanale.' });
+            await msgToEdit.edit(payload);
+            logToTerminalDiscord('📝 Edytor Embedów', `Użytkownik **${req.session.user.username}** zaktualizował embed na kanale <#${channelId}>.`);
+            res.json({ success: true, message: 'Wiadomość zaktualizowana pomyślnie!' });
+        } else {
+            await targetChannel.send(payload);
+            logToTerminalDiscord('📝 Kreator Embedów', `Użytkownik **${req.session.user.username}** wysłał embed na kanał <#${channelId}>.`);
+            res.json({ success: true, message: 'Wiadomość z embedem wysłana!' });
+        }
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Błąd podczas wysyłania.' });
+        res.status(500).json({ error: 'Błąd podczas wysyłania/edycji.' });
     }
 });
 
