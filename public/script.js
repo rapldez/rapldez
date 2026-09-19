@@ -242,81 +242,92 @@ document.addEventListener('DOMContentLoaded', () => {
             termOverlay.style.pointerEvents = 'none';
         });
 
-        // POPRAWIONE KLUCZOWE NASŁUCHIWANIE ENTERA W TERMINALU
+        // POPRAWIONA OBSŁUGA WYSYŁANIA KOMEND W TERMINALU (TELEFON / PC)
+        function handleTerminalCommand() {
+            const command = termInput.value.trim().toLowerCase();
+            termInput.value = '';
+            
+            if (command === '') return;
+
+            const cmdEcho = document.createElement('div');
+            cmdEcho.innerHTML = `<span class="prompt">root@rapldez:</span> <span style="color:white;">${command}</span>`;
+            termOutput.appendChild(cmdEcho);
+
+            const response = document.createElement('div');
+            
+            switch(command) {
+                case 'pomoc':
+                    response.innerHTML = `
+                        Dostępne polecenia systemowe:<br>
+                        &nbsp;&nbsp;<b>setup</b>&nbsp;&nbsp;&nbsp;&nbsp;- specyfikacja sprzętu i roweru<br>
+                        &nbsp;&nbsp;<b>ping</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- test opóźnienia do API Discorda<br>
+                        &nbsp;&nbsp;<b>zapros</b>&nbsp;&nbsp;&nbsp;- link do zaproszenia na Discord<br>
+                        &nbsp;&nbsp;<b>motyw</b>&nbsp;&nbsp;&nbsp;&nbsp;- zmienia motyw terminala<br>
+                        &nbsp;&nbsp;<b>clear</b>&nbsp;&nbsp;&nbsp;&nbsp;- czyści ekran terminala
+                    `;
+                    break;
+                case 'setup':
+                    response.innerHTML = `
+                        <span style="color:#23a559;">[ Sprzęt PC ]</span><br>
+                        CPU: AMD Ryzen 5<br>
+                        GPU: NVIDIA GeForce RTX 3060<br>
+                        RAM: 16GB DDR4<br>
+                        Monitor: 144Hz IPS<br><br>
+                        <span style="color:#23a559;">[ Sprzęt Rowerowy ]</span><br>
+                        Szosa: Szosówka śmigająca po szosie<br>
+                        Gravel: Gravel na bezdroża
+                    `;
+                    break;
+                case 'ping':
+                    const simulatedPing = Math.floor(Math.random() * 8) + 22; 
+                    response.innerHTML = `
+                        Badanie opóźnienia API Discorda <span style="color:#f0b232;">(gateway.discord.gg)</span>...<br>
+                        Czas odpowiedzi: <span style="color:#23a559;">${simulatedPing}ms</span><br>
+                        Status połączenia Lanyard: <span style="color:#23a559;">Stabilne</span>
+                    `;
+                    break;
+                case 'zapros':
+                    response.innerHTML = `
+                        <a href="https://discord.com/users/920029957739139083" target="_blank" style="display:inline-block; margin-top:10px; padding:8px 15px; background:linear-gradient(45deg, #d4af37, #f3e5ab); color:black; text-decoration:none; font-weight:bold; border-radius:5px; text-transform:uppercase;">Dodaj do znajomych na Discord</a>
+                    `;
+                    break;
+                case 'motyw':
+                    if(mainTerminal.classList.contains('theme-hacker')) {
+                        mainTerminal.classList.remove('theme-hacker');
+                        response.innerHTML = "Zmieniono motyw na: Domyślny";
+                    } else {
+                        mainTerminal.classList.add('theme-hacker');
+                        response.innerHTML = "Zmieniono motyw na: Hacker";
+                    }
+                    break;
+                case 'clear':
+                    termOutput.innerHTML = '';
+                    return;
+                default:
+                    response.innerHTML = `bash: ${command}: nie rozpoznano polecenia. Wpisz 'pomoc'.`;
+                    break;
+            }
+            response.style.marginBottom = "10px";
+            termOutput.appendChild(response);
+            termOutput.scrollTop = termOutput.scrollHeight;
+        }
+
+        // Nasłuchiwanie zarówno keydown (Enter), jak i upewnienie się, że focus wraca na input
         termInput.addEventListener('keydown', function (e) {
             if (e.key === 'Enter' || e.keyCode === 13) {
                 e.preventDefault();
-                const command = this.value.trim().toLowerCase();
-                this.value = '';
-                
-                const cmdEcho = document.createElement('div');
-                cmdEcho.innerHTML = `<span class="prompt">root@rapldez:</span> <span style="color:white;">${command}</span>`;
-                termOutput.appendChild(cmdEcho);
+                handleTerminalCommand();
+            }
+        });
 
-                const response = document.createElement('div');
-                
-                switch(command) {
-                    case 'pomoc':
-                        response.innerHTML = `
-                            Dostępne polecenia systemowe:<br>
-                            &nbsp;&nbsp;<b>setup</b>&nbsp;&nbsp;&nbsp;&nbsp;- specyfikacja sprzętu i roweru<br>
-                            &nbsp;&nbsp;<b>ping</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- test opóźnienia do API Discorda<br>
-                            &nbsp;&nbsp;<b>zapros</b>&nbsp;&nbsp;&nbsp;- link do zaproszenia na Discord<br>
-                            &nbsp;&nbsp;<b>motyw</b>&nbsp;&nbsp;&nbsp;&nbsp;- zmienia motyw terminala<br>
-                            &nbsp;&nbsp;<b>clear</b>&nbsp;&nbsp;&nbsp;&nbsp;- czyści ekran terminala
-                        `;
-                        break;
-                    case 'setup':
-                        response.innerHTML = `
-                            <span style="color:#23a559;">[ Sprzęt PC ]</span><br>
-                            CPU: AMD Ryzen 5<br>
-                            GPU: NVIDIA GeForce RTX 3060<br>
-                            RAM: 16GB DDR4<br>
-                            Monitor: 144Hz IPS<br><br>
-                            <span style="color:#23a559;">[ Sprzęt Rowerowy ]</span><br>
-                            Szosa: Szosówka śmigająca po szosie<br>
-                            Gravel: Gravel na bezdroża
-                        `;
-                        break;
-                    case 'ping':
-                        const simulatedPing = Math.floor(Math.random() * 8) + 22; 
-                        response.innerHTML = `
-                            Badanie opóźnienia API Discorda <span style="color:#f0b232;">(gateway.discord.gg)</span>...<br>
-                            Czas odpowiedzi: <span style="color:#23a559;">${simulatedPing}ms</span><br>
-                            Status połączenia Lanyard: <span style="color:#23a559;">Stabilne</span>
-                        `;
-                        break;
-                    case 'zapros':
-                        response.innerHTML = `
-                            <a href="https://discord.com/users/920029957739139083" target="_blank" style="display:inline-block; margin-top:10px; padding:8px 15px; background:linear-gradient(45deg, #d4af37, #f3e5ab); color:black; text-decoration:none; font-weight:bold; border-radius:5px; text-transform:uppercase;">Dodaj do znajomych na Discord</a>
-                        `;
-                        break;
-                    case 'motyw':
-                        if(mainTerminal.classList.contains('theme-hacker')) {
-                            mainTerminal.classList.remove('theme-hacker');
-                            response.innerHTML = "Zmieniono motyw na: Domyślny";
-                        } else {
-                            mainTerminal.classList.add('theme-hacker');
-                            response.innerHTML = "Zmieniono motyw na: Hacker";
-                        }
-                        break;
-                    case 'clear':
-                        termOutput.innerHTML = '';
-                        return;
-                    case '':
-                        return;
-                    default:
-                        response.innerHTML = `bash: ${command}: nie rozpoznano polecenia. Wpisz 'pomoc'.`;
-                        break;
-                }
-                response.style.marginBottom = "10px";
-                termOutput.appendChild(response);
-                termOutput.scrollTop = termOutput.scrollHeight;
+        // Dodatkowe zabezpieczenie dla urządzeń mobilnych (kliknięcie poza klawiaturą / submit w telefonie)
+        termInput.addEventListener('keyup', function (e) {
+            if (e.key === 'Enter' || e.keyCode === 13) {
+                e.preventDefault();
             }
         });
     }
 
-    // ŚMIESZNE I ZAJEBISTE TEKSTY POD KAFELKAMI SKILLS (LUA, NODE.JS, PYTHON, SQL)
     const skillTags = document.querySelectorAll('.skill-tag');
     const codeSnippets = {
         'Lua': `🔥 [MTA Scripting Engine]<br>addCommandHandler("slaba_forma", function(plr)<br>&nbsp;&nbsp;outputChatBox("#ff3333[ERROR] Brak paliwa w żyłach! Wymagana kawa.", plr, 255, 255, 255, true)<br>end)<br><span style="color:#23a559;">> Status: Wjeżdża bokiem na każdym serwerze RPG!</span>`,
