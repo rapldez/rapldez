@@ -28,7 +28,9 @@ const client = new Client({
     ] 
 });
 
+// Zablokowany cache, żeby licznik zawsze rósł
 app.get('/api/views', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     try {
         let views = parseInt(fs.readFileSync(COUNTER_FILE, 'utf-8')) || 0;
         views++;
@@ -53,10 +55,8 @@ app.post('/api/kontakt', async (req, res) => {
             return res.status(500).json({ error: 'Wystąpił błąd po stronie serwera.' });
         }
 
-        // Pobieramy wszystkich członków serwera do cache
         await guild.members.fetch(); 
         
-        // Szukamy gościa po nicku, global name albo pseudonimie na serwerze
         const targetNick = nick.toLowerCase().trim();
         const member = guild.members.cache.find(m => 
             m.user.username.toLowerCase() === targetNick || 
@@ -64,18 +64,17 @@ app.post('/api/kontakt', async (req, res) => {
             (m.nickname && m.nickname.toLowerCase() === targetNick)
         );
 
-        // BLOKADA: Jeśli nie ma go na serwerze, odrzucamy formularz
         if (!member) {
             return res.status(403).json({ message: 'Nie znaleziono Cię na serwerze Discord. Dołącz z linku lub sprawdź poprawność nicku.' });
         }
 
         const permissionOverwrites = [
             {
-                id: guild.id, // @everyone
+                id: guild.id,
                 deny: [PermissionsBitField.Flags.ViewChannel],
             },
             {
-                id: member.id, // Autor formularza
+                id: member.id,
                 allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory],
             }
         ];
