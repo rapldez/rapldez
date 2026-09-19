@@ -37,7 +37,6 @@ const counterSchema = new mongoose.Schema({
 });
 const Counter = mongoose.model('Counter', counterSchema);
 
-// Schemat do trzymania archiwów ticketów w bazie
 const ticketArchiveSchema = new mongoose.Schema({
     channelName: String,
     messagesCount: Number,
@@ -74,9 +73,14 @@ app.get('/auth/discord', (req, res) => {
 
 app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
-    if (!code) return res.redirect('/?error=no_code');
+    if (!code) {
+        console.log('❌ OAUTH BŁĄD: Brak kodu z Discorda.');
+        return res.redirect('/?error=no_code');
+    }
 
     try {
+        console.log(`⏳ OAUTH: Próbuję autoryzować kod dla URI: ${REDIRECT_URI}`);
+        
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
             method: 'POST',
             body: new URLSearchParams({
@@ -90,22 +94,28 @@ app.get('/auth/discord/callback', async (req, res) => {
         });
 
         const tokenData = await tokenResponse.json();
-        if (!tokenData.access_token) return res.redirect('/?error=bad_token');
+        
+        if (!tokenData.access_token) {
+            console.log('❌ OAUTH BŁĄD TOKENU. Discord zwrócił:', tokenData);
+            return res.redirect('/?error=bad_token');
+        }
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
             headers: { authorization: `${tokenData.token_type}${tokenData.access_token}` },
         });
 
         const userData = await userResponse.json();
+        console.log(`✅ OAUTH: Zalogowano użytkownika o ID: ${userData.id} (${userData.username})`);
 
         if (userData.id === YOUR_DISCORD_ID) {
             req.session.user = { id: userData.id, username: userData.username };
             return res.redirect('/?login=success');
         } else {
+            console.log(`❌ OAUTH BŁĄD: Niezgodne ID. Oczekiwano: ${YOUR_DISCORD_ID}, weszło: ${userData.id}`);
             return res.redirect('/?error=unauthorized');
         }
     } catch (error) {
-        console.error('OAuth błąd:', error);
+        console.error('❌ OAUTH BŁĄD KRYTYCZNY:', error);
         res.redirect('/?error=server_error');
     }
 });
@@ -165,7 +175,6 @@ app.post('/api/kontakt', async (req, res) => {
         const safeNick = nick.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 16) || 'nieznany';
         const channelName = `ticket-${safeNick}`;
         
-        // Zapisujemy dokładną godzinę i datę otwarcia w topicu kanału wraz z ID
         const createdAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
         const topicData = `${member ? member.id : 'brak_id'}\vert{}CREATED:${createdAtStr}`;
         
@@ -263,7 +272,6 @@ client.on('interactionCreate', async interaction => {
         }
         const closedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
         
-        // Zapisujemy czas zamknięcia w topicu
         interaction.channel.setTopic(`${targetId}|CREATED:${createdAtStr}|CLOSED:${closedAtStr}`).catch(() => null);
 
         const reopenRow = new ActionRowBuilder().addComponents(
@@ -290,14 +298,12 @@ client.on('interactionCreate', async interaction => {
             let messages = await interaction.channel.messages.fetch({ limit: 100 });
             messages = Array.from(messages.values()).reverse();
             
-            // Wyciąganie uczestników
             const participantsSet = new Set();
             messages.forEach(m => {
                 if (!m.author.bot) participantsSet.add(m.author.username);
             });
             const participantsList = participantsSet.size > 0 ? Array.from(participantsSet).join(', ') : 'Brak interakcji';
 
-            // Czasy
             let closedAtStr = 'Nie zamknięto ręcznie';
             if (topic.includes('CLOSED:')) {
                 const match = topic.match(/CLOSED:(.+)/);
@@ -305,14 +311,12 @@ client.on('interactionCreate', async interaction => {
             }
             const archivedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
 
-            // Generowanie HTML do bazy
             let htmlContent = `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Archiwum</title><style>body{background:#313338;color:#dbdee1;font-family:sans-serif;padding:20px}.message{margin-bottom:15px}.author{font-weight:bold;color:#f2f3f5}.content{background:#2b2d31;padding:10px;border-radius:6px;display:inline-block}</style></head><body><h2>Archiwum: ${interaction.channel.name}</h2>`;
             messages.forEach(m => {
                 htmlContent += `<div class="message"><span class="author">${m.author.username}</span> <span style="font-size:11px;color:#949ba4">${m.createdAt.toLocaleString('pl-PL')}</span><br><div class="content">${m.content || '[Media]'}</div></div>`;
             });
             htmlContent += `</body></html>`;
 
-            // Zapis do bazy danych MongoDB
             await TicketArchive.create({
                 channelName: interaction.channel.name,
                 messagesCount: messages.length,
@@ -324,7 +328,6 @@ client.on('interactionCreate', async interaction => {
                 htmlContent: htmlContent
             });
 
-            // Upiększony Embed z wymaganymi danymi (bez dołączania pliku na czat, żeby był porządek)
             const embedLog = new EmbedBuilder()
                 .setColor('#111214')
                 .setAuthor({ name: '📁 RAPLDEZ • SZCZEGÓŁOWE ARCHIWUM TICKETA' })
