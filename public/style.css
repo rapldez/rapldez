@@ -159,37 +159,7 @@ h1 { font-size: 30px; font-weight: 600; margin: 0; text-shadow: 0 0 8px rgba(255
 .action-icons i:hover { color: white; }
 .type-line span { visibility: hidden; }
 
-/* --- RWD - NAPRAWA DLA TELEFONÓW --- */
-@media (max-width: 600px) {
-    .card {
-        width: 95%;
-        padding: 20px;
-    }
-    .card-content {
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-    }
-    .info-section {
-        align-items: center;
-        text-align: center;
-    }
-    .name-row {
-        justify-content: center;
-    }
-    .about-section {
-        text-align: center;
-    }
-    .about-content p {
-        justify-content: center;
-    }
-    .skills-container {
-        justify-content: center;
-        margin-left: 0;
-    }
-}
-
-/* KONTENER PRZYCISKÓW ADMINA */
+/* --- KONTENER PRZYCISKÓW ADMINA --- */
 .admin-panel-buttons {
     position: fixed;
     top: 20px;
@@ -203,7 +173,7 @@ h1 { font-size: 30px; font-weight: 600; margin: 0; text-shadow: 0 0 8px rgba(255
     background: rgba(15, 15, 18, 0.7);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(2, 68, 66, 0.5); /* Akcent pod główny kolor logów */
+    border: 1px solid rgba(2, 68, 66, 0.5);
     color: #dbdee1;
     padding: 8px 14px;
     border-radius: 8px;
@@ -223,7 +193,7 @@ h1 { font-size: 30px; font-weight: 600; margin: 0; text-shadow: 0 0 8px rgba(255
     border-color: #024442;
 }
 
-/* NAKŁADKA KREATORA EMBEDÓW */
+/* --- NAKŁADKA KREATORA EMBEDÓW --- */
 #embed-builder-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100vh;
     background: rgba(0,0,0,0.6); backdrop-filter: blur(5px);
@@ -256,3 +226,43 @@ h1 { font-size: 30px; font-weight: 600; margin: 0; text-shadow: 0 0 8px rgba(255
     padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer;
 }
 #send-builder-btn:hover { background: #012e2d; }
+
+/* --- RWD - NAPRAWA DLA TELEFONÓW --- */
+@media (max-width: 600px) {
+    .card {
+        width: 95%;
+        padding: 20px;
+    }
+    .card-content {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    .info-section {
+        align-items: center;
+        text-align: center;
+    }
+    .name-row {
+        justify-content: center;
+    }
+    .about-section {
+        text-align: center;
+    }
+    .about-content p {
+        justify-content: center;
+    }
+    .skills-container {
+        justify-content: center;
+        margin-left: 0;
+    }
+    .admin-panel-buttons {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        position: relative;
+        top: 0;
+        left: 0;
+        margin-bottom: 10px;
+        width: 100%;
+    }
+}
