@@ -40,6 +40,13 @@ const MAIN_COLOR = '#024442';
 // --- FUNKCJE POMOCNICZE ---
 const createLogEmbed = (title, desc) => new EmbedBuilder().setColor(MAIN_COLOR).setAuthor({ name: title }).setDescription(desc).setTimestamp();
 
+// Formatowanie daty: najpierw godzina, potem data
+const formatDatePL = (dateObj = new Date()) => {
+    const time = dateObj.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Warsaw' });
+    const date = dateObj.toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw' });
+    return `${time},${date}`;
+};
+
 async function logToTerminalDiscord(title, description) {
     try {
         const channel = client.channels.cache.get(TERMINAL_LOG_CHANNEL);
@@ -113,7 +120,6 @@ app.get('/auth/discord', (req, res) => res.redirect(`https://discord.com/api/oau
 
 app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
-    // POBIERANIE TYLKO PIERWSZEGO, PRAWDZIWEGO IP KLIENTA Z PROXY RENDERA
     let userIP = req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : req.socket.remoteAddress;
 
     if (!code) return res.redirect('/?error=no_code');
@@ -148,7 +154,7 @@ app.get('/auth/discord/callback', async (req, res) => {
 app.get('/api/check-auth', (req, res) => res.json({ authenticated: (req.session?.user?.id === YOUR_DISCORD_ID), username: req.session?.user?.username }));
 app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({ success: true })));
 
-// --- API STRONY WWW (FORMULARZ KONTAKTOWY, TERMINAL, EMBEDY) ---
+// --- API STRONY WWW ---
 app.get('/api/views', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     try {
@@ -163,7 +169,7 @@ app.get('/api/views', async (req, res) => {
     }
 });
 
-// FORMULARZ KONTAKTOWY (/api/kontakt)
+// FORMULARZ KONTAKTOWY (ZGŁOSZENIE-X)
 app.post('/api/kontakt', async (req, res) => {
     const { nick, subject, message } = req.body;
     if (!nick || !message || !subject) return res.status(400).json({ error: 'Brakujące dane' });
@@ -184,10 +190,13 @@ app.post('/api/kontakt', async (req, res) => {
             permissionOverwrites.push({ id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
         }
 
-        const safeNick = nick.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 16) || 'nieznany';
-        const channelName = `ticket-${safeNick}`;
-        const createdAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
-        const topicData = `${member ? member.id : 'brak_id'}\vert{}CREATED:${createdAtStr}`;
+        // Generowanie nazwy zgłoszenie-X na podstawie liczby dokumentów w bazie + 1
+        const ticketCount = await TicketArchive.countDocuments();
+        const nextNumber = ticketCount + 1;
+        const channelName = `zgłoszenie-${nextNumber}`;
+        
+        const createdAtStr = formatDatePL(new Date());
+        const topicData = `${member ? member.id : 'brak_id'}\vert{}${createdAtStr}|Brak`;
         
         const newChannel = await guild.channels.create({
             name: channelName,
@@ -211,6 +220,7 @@ app.post('/api/kontakt', async (req, res) => {
         await newChannel.send({ content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie ze strony!`, embeds: [embed], components: [row] });
         res.status(200).json({ message: 'Zgłoszenie wysłane!' });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: 'Wystąpił błąd serwera.' });
     }
 });
@@ -233,7 +243,7 @@ app.post('/api/terminal', async (req, res) => {
     
     if (cmdLower === 'paste' && cmdArgs.length > 1) {
         const shortId = Math.random().toString(36).substring(2, 8);
-        await Paste.create({ shortId, content: cmd.substring(6), createdAt: new Date().toLocaleString() });
+        await Paste.create({ shortId, content: cmd.substring(6), createdAt: formatDatePL(new Date()) });
         return res.json({ output: `Zapisano kod. Link: https://rapldez.onrender.com/p/${shortId}` });
     }
     
@@ -308,7 +318,7 @@ client.on('messageCreate', async message => {
         const reason = args.slice(2).join(' ') || 'Brak powodu';
         if (!targetUser) return message.reply('Oznacz użytkownika, np. `!warn @user spam`');
         
-        await Warn.create({ userId: targetUser.id, reason: reason, adminId: message.author.id, date: new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) });
+        await Warn.create({ userId: targetUser.id, reason: reason, adminId: message.author.id, date: formatDatePL(new Date()) });
         message.channel.send({ embeds: [createLogEmbed('⚠️ OSTRZEŻENIE', `Użytkownik <@${targetUser.id}> otrzymał ostrzeżenie.\n**Powód:** ${reason}`)] });
         sendServerLog('⚠️ Nadano ostrzeżenie', `**Admin:** <@${message.author.id}>\n**Ukarany:** <@${targetUser.id}>\n**Powód:** ${reason}`);
     }
@@ -427,7 +437,7 @@ client.on('roleDelete', r => sendServerLog('🗑️ Usunięcie roli', `Usunięto
 client.on('guildBanAdd', ban => sendServerLog('🔨 Zbanowanie członka', `Zbanowano \`${ban.user.tag}\`.`));
 client.on('guildBanRemove', ban => sendServerLog('🕊️ Odbanowanie członka', `Odbanowano \`${ban.user.tag}\`.`));
 
-// --- SYSTEM MONITORU INFRASTRUKTURY (JEDNA WIADOMOŚĆ CYKLICZNIE EDYTOWANA) ---
+// --- SYSTEM MONITORU INFRASTRUKTURY ---
 client.once('ready', async () => {
     app.listen(PORT, () => { console.log(`Serwer działa na porcie ${PORT}!`); });
     try {
@@ -495,24 +505,34 @@ client.on('interactionCreate', async interaction => {
     const topic = interaction.channel.topic || '';
     const parts = topic.split('|');
     let targetId = parts[0] || 'brak_id';
-    let createdAtStr = 'Nieznana';
-    const createdPart = parts.find(p => p && p.startsWith('CREATED:'));
-    if (createdPart) createdAtStr = createdPart.replace('CREATED:', '');
+    let createdAtStr = parts[1] || formatDatePL(new Date());
 
     if (interaction.customId === 'close_ticket') {
         if (targetId && targetId !== 'brak_id') await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
-        const closedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
-        interaction.channel.setTopic(`${targetId}|CREATED:${createdAtStr}|CLOSED:${closedAtStr}`).catch(() => null);
+        
+        const closedAtStr = formatDatePL(new Date());
+        interaction.channel.setTopic(`${targetId}|${createdAtStr}|${closedAtStr}`).catch(() => null);
+
+        // Zmiana nazwy na rozwiązany-X
+        const allChannels = interaction.guild.channels.cache;
+        const resolvedCount = allChannels.filter(c => c.name.startsWith('rozwiązany-')).size + 1;
+        await interaction.channel.setName(`rozwiązany-${resolvedCount}`).catch(() => null);
 
         const reopenRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('open_timer').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
+            new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
         );
-        await interaction.reply({ content: `🔒 Zgłoszenie zamknięte (${closedAtStr}).`, components: [reopenRow] });
+        await interaction.reply({ content: `🔒 Zgłoszenie zamknięte i oznaczone jako rozwiązane (${closedAtStr}).`, components: [reopenRow] });
     }
 
     if (interaction.customId === 'open_ticket') {
         if (targetId && targetId !== 'brak_id') await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: true }).catch(() => null);
+        
+        // Powrót do nazwy zgłoszenie-X po ponownym otwarciu
+        const allChannels = interaction.guild.channels.cache;
+        const ticketCount = allChannels.filter(c => c.name.startsWith('zgłoszenie-')).size + 1;
+        await interaction.channel.setName(`zgłoszenie-${ticketCount}`).catch(() => null);
+
         const closeRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
@@ -529,16 +549,23 @@ client.on('interactionCreate', async interaction => {
             messages.forEach(m => { if (!m.author.bot) participantsSet.add(m.author.username); });
             const participantsList = participantsSet.size > 0 ? Array.from(participantsSet).join(', ') : 'Brak interakcji';
 
-            let closedAtStr = 'Nie zamknięto ręcznie';
-            const closedPart = parts.find(p => p && p.startsWith('CREATED:'));
-            if (closedPart) closedAtStr = closedPart.replace('CREATED:', '');
-            const archivedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+            let closedAtStr = parts[2] && parts[2] !== 'Brak' ? parts[2] : formatDatePL(new Date());
+            const archivedAtStr = formatDatePL(new Date());
 
             let htmlContent = `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Archiwum</title><style>body{background:#313338;color:#dbdee1;font-family:sans-serif;padding:20px}.message{margin-bottom:15px}.author{font-weight:bold;color:#f2f3f5}.content{background:#2b2d31;padding:10px;border-radius:6px;display:inline-block}</style></head><body><h2>Archiwum: ${interaction.channel.name}</h2>`;
-            messages.forEach(m => { htmlContent += `<div class="message"><span class="author">${m.author.username}</span> <span style="font-size:11px;color:#949ba4">${m.createdAt.toLocaleString('pl-PL')}</span><br><div class="content">${m.content || '[Media]'}</div></div>`; });
+            messages.forEach(m => { htmlContent += `<div class="message"><span class="author">${m.author.username}</span> <span style="font-size:11px;color:#949ba4">${formatDatePL(m.createdAt)}</span><br><div class="content">${m.content || '[Media]'}</div></div>`; });
             htmlContent += `</body></html>`;
 
-            await TicketArchive.create({ channelName: interaction.channel.name, messagesCount: messages.length, participants: Array.from(participantsSet), createdAt: createdAtStr, closedAt: closedAtStr, archivedAt: archivedAtStr, archivedBy: interaction.user.username, htmlContent: htmlContent });
+            await TicketArchive.create({
+                channelName: interaction.channel.name,
+                messagesCount: messages.length,
+                participants: Array.from(participantsSet),
+                createdAt: createdAtStr,
+                closedAt: closedAtStr,
+                archivedAt: archivedAtStr,
+                archivedBy: interaction.user.username,
+                htmlContent: htmlContent
+            });
 
             const embedLog = new EmbedBuilder()
                 .setColor(MAIN_COLOR)
@@ -548,7 +575,9 @@ client.on('interactionCreate', async interaction => {
 
             const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
             if (logChannel) await logChannel.send({ embeds: [embedLog] });
-        } catch (err) {}
+        } catch (err) {
+            console.error(err);
+        }
         setTimeout(() => { interaction.channel.delete().catch(() => null); }, 4000);
     }
 });
