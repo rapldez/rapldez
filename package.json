@@ -1,7 +1,7 @@
 {
-  "name": "rapldez_Bot",
+  "name": "rapldez-bot",
   "version": "1.0.0",
-  "description": "Bot created by rapldez",
+  "description": "",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
@@ -10,6 +10,8 @@
     "cors": "^2.8.5",
     "discord.js": "^14.14.1",
     "express": "^4.18.2",
-    "mongoose": "^8.0.0"
+    "express-session": "^1.18.0",
+    "mongoose": "^8.0.0",
+    "node-fetch": "^2.7.0"
   }
 }
