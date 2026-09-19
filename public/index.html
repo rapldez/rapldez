@@ -14,12 +14,10 @@
         .toast.error i { color: #f23f42; font-size: 18px; }
         .weather-widget { display: inline-flex; align-items: center; gap: 6px; color: #a0a0a0; margin-left: 8px; }
         
-        /* Pasek logowania i mały przycisk Admin */
         .auth-bar { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; font-size: 12px; }
         .admin-btn { background: #2b2d31; color: #b5bac1; border: 1px solid rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 4px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; transition: all 0.2s; }
         .admin-btn:hover { background: #5865F2; color: #fff; border-color: transparent; }
 
-        /* Poprawka warstw formularza kontaktowego */
         #contact-overlay, #embed-builder-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -38,11 +36,23 @@
             border: 1px solid rgba(255,255,255,0.08);
             padding: 20px;
             border-radius: 12px;
-            width: 90%;
-            max-width: 400px;
+            width: 95%;
+            max-width: 520px;
+            max-height: 90vh;
+            overflow-y: auto;
             box-shadow: 0 10px 30px rgba(0,0,0,0.8);
             z-index: 9999;
+            color: #dbdee1;
+            font-family: inherit;
         }
+        /* Style dla zaawansowanego kreatora embedów */
+        .builder-section { background: #1e1f22; border: 1px solid #2b2d31; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+        .builder-section-header { padding: 10px 14px; background: #2b2d31; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 13px; color: #fff; }
+        .builder-section-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .builder-input { background: #111214; border: 1px solid #383a40; padding: 8px 10px; color: #fff; border-radius: 6px; outline: none; font-size: 13px; width: 100%; box-sizing: border-box; }
+        .builder-input:focus { border-color: #5865F2; }
+        .builder-label { font-size: 11px; color: #949ba4; font-weight: 600; text-transform: uppercase; margin-top: 4px; }
+        .color-picker-wrapper { display: flex; gap: 8px; align-items: center; }
     </style>
 </head>
 <body>
@@ -66,7 +76,6 @@
             <div id="auth-bar" class="auth-bar">
                 <span id="auth-status-text">Sprawdzanie uprawnień...</span>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <!-- DODANY PRZYCISK KREATORA EMBEDÓW (Ukryty, pomniejszony) -->
                     <button class="admin-btn" id="open-embed-btn" style="display: none; background: #024442; border-color: #024442; color: #fff; font-size: 11px; padding: 3px 8px; cursor: pointer;" onclick="openEmbedBuilder()">
                         <i class="fa-solid fa-wand-magic-sparkles"></i> Kreator
                     </button>
@@ -81,7 +90,7 @@
         </div>
     </div>
 
-    <!-- ISTNIEJĄCY FORMULARZ KONTAKTOWY -->
+    <!-- FORMULARZ KONTAKTOWY -->
     <div id="contact-overlay">
         <div class="contact-window">
             <div class="contact-header" style="display:flex; justify-content:space-between; margin-bottom:15px; color:#fff; font-weight:bold;">
@@ -98,19 +107,94 @@
         </div>
     </div>
 
-    <!-- DODANE OKNO KREATORA EMBEDÓW -->
+    <!-- ZAAWANSOWANY KREATOR EMBEDÓW -->
     <div id="embed-builder-overlay">
         <div class="contact-window">
-            <div class="contact-header" style="display:flex; justify-content:space-between; margin-bottom:15px; color:#fff; font-weight:bold;">
-                <span>Kreator Embedów na żywo</span>
-                <i class="fa-solid fa-xmark" onclick="closeEmbedBuilder()" style="cursor:pointer;"></i>
+            <div class="contact-header" style="display:flex; justify-content:space-between; margin-bottom:15px; color:#fff; font-weight:bold; align-items:center;">
+                <span><i class="fa-solid fa-wand-magic-sparkles" style="color: #024442;"></i> Zaawansowany Kreator Embedów</span>
+                <i class="fa-solid fa-xmark" onclick="closeEmbedBuilder()" style="cursor:pointer; font-size: 16px;"></i>
             </div>
             <div class="contact-body" style="display:flex; flex-direction:column; gap:10px;">
-                <input type="text" id="embed-channel" placeholder="ID Kanału Discord (wymagane)" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none;" required>
-                <input type="text" id="embed-title" placeholder="Tytuł Embedu (opcjonalnie)" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none;">
-                <textarea id="embed-desc" placeholder="Treść / Opis (wymagane, używaj \n dla nowej linii)" rows="4" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none; resize:none;" required></textarea>
-                <input type="text" id="embed-footer" placeholder="Stopka (opcjonalnie)" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none;">
-                <button id="send-builder-btn" onclick="sendEmbed()" style="background:#024442; color:#fff; border:none; padding:10px; border-radius:6px; font-weight:bold; cursor:pointer; transition: 0.2s;">Wyślij na Serwer</button>
+                
+                <!-- Główne ustawienia -->
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <span class="builder-label">ID Kanału Docelowego (Wymagane)</span>
+                    <input type="text" id="embed-channel" class="builder-input" placeholder="np. 1550753070726512730" required>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <span class="builder-label">Treść Wiadomości / Tekst nad embedem (Opcjonalnie)</span>
+                    <textarea id="embed-content" class="builder-input" placeholder="Zwykły tekst wyświetlany nad embedem..." rows="2" style="resize:none;"></textarea>
+                </div>
+
+                <!-- Sekcja Autora -->
+                <div class="builder-section">
+                    <div class="builder-section-header" onclick="toggleBuilderSection(this)">
+                        <span><i class="fa-solid fa-user"></i> Autor</span>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                    <div class="builder-section-body" style="display:none;">
+                        <span class="builder-label">Nazwa Autora</span>
+                        <input type="text" id="embed-author-name" class="builder-input" placeholder="Nazwa wyświetlana u góry">
+                        <span class="builder-label">Link URL Autora</span>
+                        <input type="text" id="embed-author-url" class="builder-input" placeholder="https://...">
+                        <span class="builder-label">Ikona Autora (URL)</span>
+                        <input type="text" id="embed-author-icon" class="builder-input" placeholder="https://...">
+                    </div>
+                </div>
+
+                <!-- Sekcja Treści (Body) -->
+                <div class="builder-section">
+                    <div class="builder-section-header" onclick="toggleBuilderSection(this)">
+                        <span><i class="fa-solid fa-align-left"></i> Treść Embedu (Body)</span>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                    <div class="builder-section-body">
+                        <span class="builder-label">Tytuł</span>
+                        <input type="text" id="embed-title" class="builder-input" placeholder="Główny tytuł embedu">
+                        <span class="builder-label">Opis (Możesz używać \n)</span>
+                        <textarea id="embed-desc" class="builder-input" placeholder="Treść główna embedu..." rows="4" style="resize:none;"></textarea>
+                        <span class="builder-label">Kolor Bocznego Paska</span>
+                        <div class="color-picker-wrapper">
+                            <input type="color" id="embed-color-picker" value="#024442" style="background:none; border:none; width:35px; height:32px; cursor:pointer;" oninput="document.getElementById('embed-color-text').value=this.value">
+                            <input type="text" id="embed-color-text" class="builder-input" value="#024442" oninput="document.getElementById('embed-color-picker').value=this.value">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sekcja Obrazków -->
+                <div class="builder-section">
+                    <div class="builder-section-header" onclick="toggleBuilderSection(this)">
+                        <span><i class="fa-solid fa-image"></i> Obrazki i Miniaturka</span>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                    <div class="builder-section-body" style="display:none;">
+                        <span class="builder-label">Duży Obrazek (Image URL)</span>
+                        <input type="text" id="embed-image" class="builder-input" placeholder="https://...">
+                        <span class="builder-label">Miniaturka w rogu (Thumbnail URL)</span>
+                        <input type="text" id="embed-thumbnail" class="builder-input" placeholder="https://...">
+                    </div>
+                </div>
+
+                <!-- Sekcja Stopki -->
+                <div class="builder-section">
+                    <div class="builder-section-header" onclick="toggleBuilderSection(this)">
+                        <span><i class="fa-solid fa-shoe-prints"></i> Stopka i Data</span>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                    <div class="builder-section-body" style="display:none;">
+                        <span class="builder-label">Tekst Stopki</span>
+                        <input type="text" id="embed-footer" class="builder-input" placeholder="Tekst na samym dole">
+                        <span class="builder-label">Ikona Stopki (URL)</span>
+                        <input type="text" id="embed-footer-icon" class="builder-input" placeholder="https://...">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                            <input type="checkbox" id="embed-timestamp" style="cursor: pointer;" checked>
+                            <label for="embed-timestamp" style="font-size: 12px; cursor: pointer;">Dodaj aktualną datę i godzinę (Timestamp)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="send-builder-btn" onclick="sendEmbed()" style="background:#024442; color:#fff; border:none; padding:12px; border-radius:6px; font-weight:bold; cursor:pointer; transition: 0.2s; margin-top:5px;"><i class="fa-solid fa-paper-plane"></i> Wyślij Embed na Serwer</button>
                 <div id="embed-status" style="font-size:12px; color:#23a559; text-align:center; height:18px;"></div>
             </div>
         </div>
@@ -216,7 +300,7 @@
 
     <div id="toast-container" class="toast-container"></div>
 
-    <!-- DODANE SKRYPTY OBSŁUGUJĄCE KREATOR EMBEDÓW -->
+    <!-- SKRYPTY OBSŁUGUJĄCE ZAAWANSOWANY KREATOR -->
     <script>
         function openEmbedBuilder() {
             document.getElementById('embed-builder-overlay').style.opacity = '1';
@@ -228,16 +312,37 @@
             document.getElementById('embed-builder-overlay').style.pointerEvents = 'none';
         }
 
+        function toggleBuilderSection(header) {
+            const body = header.nextElementSibling;
+            const icon = header.querySelector('.fa-chevron-down, .fa-chevron-up');
+            if (body.style.display === 'none') {
+                body.style.display = 'flex';
+                if(icon) icon.className = 'fa-solid fa-chevron-up';
+            } else {
+                body.style.display = 'none';
+                if(icon) icon.className = 'fa-solid fa-chevron-down';
+            }
+        }
+
         async function sendEmbed() {
             const channelId = document.getElementById('embed-channel').value.trim();
+            const content = document.getElementById('embed-content').value.trim();
+            const authorName = document.getElementById('embed-author-name').value.trim();
+            const authorUrl = document.getElementById('embed-author-url').value.trim();
+            const authorIcon = document.getElementById('embed-author-icon').value.trim();
             const title = document.getElementById('embed-title').value.trim();
             const desc = document.getElementById('embed-desc').value.trim();
+            const color = document.getElementById('embed-color-text').value.trim() || '#024442';
+            const image = document.getElementById('embed-image').value.trim();
+            const thumbnail = document.getElementById('embed-thumbnail').value.trim();
             const footer = document.getElementById('embed-footer').value.trim();
+            const footerIcon = document.getElementById('embed-footer-icon').value.trim();
+            const timestamp = document.getElementById('embed-timestamp').checked;
             const status = document.getElementById('embed-status');
             
-            if (!channelId || !desc) {
+            if (!channelId || (!desc && !title && !content)) {
                 status.style.color = '#f23f42';
-                status.innerText = 'Podaj ID kanału i treść!';
+                status.innerText = 'Podaj ID kanału oraz treść lub tytuł embedu!';
                 return;
             }
 
@@ -248,7 +353,11 @@
                 const res = await fetch('/api/send-embed', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ channelId, title, description: desc, footer })
+                    body: JSON.stringify({
+                        channelId, content, authorName, authorUrl, authorIcon,
+                        title, description: desc, color, image, thumbnail,
+                        footer, footerIcon, timestamp
+                    })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -256,8 +365,6 @@
                     setTimeout(() => {
                         closeEmbedBuilder();
                         status.innerText = '';
-                        document.getElementById('embed-desc').value = '';
-                        document.getElementById('embed-title').value = '';
                     }, 1500);
                 } else {
                     status.style.color = '#f23f42';
@@ -269,7 +376,6 @@
             }
         }
 
-        // Sprawdzanie uprawnień i odkrywanie przycisku "Kreator"
         window.addEventListener('DOMContentLoaded', async () => {
             try {
                 const res = await fetch('/api/check-auth');
