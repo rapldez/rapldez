@@ -445,7 +445,7 @@ app.post('/api/send-embed', async (req, res) => {
             res.json({ success: true, message: 'Wiadomość zaktualizowana pomyślnie!' });
         } else {
             await targetChannel.send(payload);
-            logToTerminalDiscord('📝 Kreator Embedów', `Użytkownik **${req.session.user.username}** wysłał embed na kanał <#${channelId}>.`);
+            logToTerminalDiscord('📝 Kreator Embedów', `Użytkownik **${req.session.user.username}** wysłał embed na kanale <#${channelId}>.`);
             res.json({ success: true, message: 'Wiadomość z embedem wysłana!' });
         }
     } catch (err) {
@@ -477,7 +477,7 @@ client.on('messageCreate', async message => {
         const userId = message.author.id;
         const msgContent = message.content.toLowerCase();
 
-        // --- 1. DETEKTOR SCAM-LINKÓW (PUNKT 20) ---
+        // 1. DETEKTOR SCAM-LINKÓW
         const scamRegex = /(discorcl|dlscord|discord-nitro|discord-app|nitro-gift|steamcommunitly|stearmcommunity|steam-nitro|free-nitro|discord\.xyz|discord-gift|gift-nitro)/i;
         const isRealDiscord = msgContent.includes('discord.com') || msgContent.includes('discord.gg');
         
@@ -492,7 +492,7 @@ client.on('messageCreate', async message => {
             return;
         }
 
-        // --- 2. TARCZA MASOWYCH WZMIANEK (PUNKT 22) ---
+        // 2. TARCZA MASOWYCH WZMIANEK
         const mentionCount = message.mentions.users.size + message.mentions.roles.size;
         const hasEveryone = message.content.includes('@everyone') || message.content.includes('@here');
         
@@ -507,7 +507,7 @@ client.on('messageCreate', async message => {
             return;
         }
 
-        // --- 3. ORYGINALNY SYSTEM ANTY-SPAM ---
+        // 3. ORYGINALNY SYSTEM ANTY-SPAM
         const currentTime = Date.now();
         if (!userSpamMap.has(userId)) {
             userSpamMap.set(userId, { timestamps: [], lastMessage: msgContent, duplicateCount: 1 });
@@ -548,6 +548,34 @@ client.on('messageCreate', async message => {
             userSpamMap.delete(userId);
             return; 
         }
+    }
+
+    // --- KOMENDA: KLONOWANIE UPRAWNIEŃ KANAŁÓW (!sync-perms) ---
+    if (message.content.startsWith('!sync-perms') && message.author.id === YOUR_DISCORD_ID) {
+        const args = message.content.split(' ');
+        const sourceChannel = message.mentions.channels.first() || message.guild.channels.cache.get(args[1]);
+        const targetChannel = message.guild.channels.cache.get(args[2]) || message.channel;
+
+        if (!sourceChannel) {
+            return message.reply('❌ Użycie: `!sync-perms #wzorcowy-kanal [#docelowy-kanal]`');
+        }
+
+        try {
+            const overwrites = sourceChannel.permissionOverwrites.cache.map(o => ({
+                id: o.id,
+                type: o.type,
+                allow: o.allow,
+                deny: o.deny
+            }));
+
+            await targetChannel.permissionOverwrites.set(overwrites);
+            message.reply(`✅ Pomyślnie zsynchronizowano uprawnienia z <#${sourceChannel.id}> na <#${targetChannel.id}>!`);
+            sendServerLog('🔄 Synchronizacja Permisji', `Root <@${message.author.id}> skopiował uprawnienia z <#${sourceChannel.id}> do <#${targetChannel.id}>.`);
+        } catch (err) {
+            console.error('Błąd sync-perms:', err);
+            message.reply('❌ Wystąpił błąd podczas klonowania uprawnień.');
+        }
+        return;
     }
 
     const voiceCommands = ['!lock', '!unlock', '!permit', '!reject', '!limit', '!name'];
