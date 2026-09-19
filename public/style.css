@@ -1,60 +1,56 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
 
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-family: 'Inter', sans-serif;
 }
 
 body, html {
-    background-color: #050505;
-    color: #ffffff;
     width: 100%;
     height: 100vh;
+    overflow: hidden;
+    background-color: #0d0d0f;
+    color: #ffffff;
+}
+
+.video-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: -1;
+    filter: brightness(0.6);
+}
+
+.profile-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
     display: flex;
     justify-content: center;
     align-items: center;
-    overflow-x: hidden;
+    padding: 20px;
 }
 
-a {
-    text-decoration: none;
-    color: inherit;
-}
-
-/* Tło wideo */
-#bg-video, .bg-video, video, .video-background {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    min-width: 100%;
-    min-height: 100%;
-    width: auto;
-    height: auto;
-    z-index: -1;
-    transform: translateX(-50%) translateY(-50%);
-    filter: brightness(0.6);
-    object-fit: cover;
-}
-
-/* Główna karta ze szkła */
-.container, .profile-card, .card, .main-container {
-    background: rgba(15, 15, 18, 0.45);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+.profile-card {
+    background: rgba(15, 15, 18, 0.5);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 20px;
-    padding: 30px;
-    width: 90%;
-    max-width: 550px;
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
-    position: relative;
-    z-index: 10;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 500px;
+    padding: 25px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
     display: flex;
     flex-direction: column;
     gap: 20px;
-    animation: fadeIn 0.8s ease forwards;
+    /* Animacja wjazdu */
+    animation: fadeIn 1s ease forwards;
 }
 
 @keyframes fadeIn {
@@ -62,150 +58,172 @@ a {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* --- FIX DLA TELEFONÓW (Góra karty) --- */
-.header, .profile-header, .top-bar, .status-bar, .info-bar {
+/* KLUCZOWA POPRAWKA DLA TELEFONÓW */
+.top-bar {
     display: flex;
-    flex-wrap: wrap; /* To naprawia ucinanie tekstu */
+    flex-wrap: wrap; 
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.profile-header {
+    display: flex;
     align-items: center;
     gap: 15px;
 }
 
-.avatar, .profile-avatar, img.avatar {
-    width: 90px;
-    height: 90px;
+.profile-avatar {
+    width: 80px;
+    height: 80px;
     border-radius: 50%;
     border: 2px solid rgba(255, 255, 255, 0.1);
     object-fit: cover;
 }
 
-.user-info, .profile-info {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-width: 200px;
-}
-
-.username {
-    font-size: 26px;
+.profile-info h1 {
+    font-size: 24px;
     font-weight: 800;
     letter-spacing: -0.5px;
 }
 
-.description, .bio {
-    color: #a1a1aa;
+.profile-info p {
+    color: #949ba4;
     font-size: 14px;
-    margin-top: 4px;
 }
 
-/* --- KARTY WEWNĘTRZNE (Discord, Muzyka) --- */
-.discord-card, .music-player, .inner-card {
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 14px;
-    padding: 15px;
-    display: flex;
-    flex-wrap: wrap;
+.status-badge {
+    display: inline-flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 15px;
-    transition: background 0.2s;
-}
-
-.discord-card:hover, .music-player:hover {
+    gap: 6px;
     background: rgba(0, 0, 0, 0.4);
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    color: #b5bac1;
+    border: 1px solid rgba(255,255,255,0.05);
 }
 
-.join-btn, .btn-primary {
-    background: #23a559;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 700;
-    transition: background 0.2s;
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #f0b232; /* Kolor zaraz wracam */
 }
 
-.join-btn:hover, .btn-primary:hover {
-    background: #1a7a42;
-}
-
-/* --- ZNACZKI / O MNIE --- */
-.badges, .socials {
+.social-links {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 10px;
+    gap: 12px;
+    margin-top: 5px;
 }
 
-.section-title {
-    font-size: 11px;
+.social-links a {
+    color: #b5bac1;
+    text-decoration: none;
+    font-size: 18px;
+    transition: color 0.2s;
+}
+
+.social-links a:hover {
+    color: #ffffff;
+}
+
+.about-section h2 {
+    font-size: 12px;
     text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: #71717a;
-    margin-bottom: 8px;
-    font-weight: 700;
+    color: #949ba4;
+    margin-bottom: 10px;
+    letter-spacing: 1px;
 }
 
-.about-text, .text-block {
+.about-text {
     font-size: 14px;
-    color: #d4d4d8;
-    line-height: 1.6;
+    color: #dbdee1;
+    line-height: 1.5;
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
-/* --- BOCZNE MENU / TERMINAL (Fix surowego tekstu z dołu) --- */
-.controls, .side-menu, #menu, .terminal-controls {
-    position: fixed;
-    top: 20px;
-    left: 20px;
+.badges {
     display: flex;
-    flex-direction: column;
     gap: 8px;
-    z-index: 50;
+    flex-wrap: wrap;
+    margin: 10px 0;
 }
 
-.controls div, .controls button, .menu-item, .terminal-btn {
-    background: rgba(15, 15, 18, 0.6);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    color: #fff;
-    padding: 10px 16px;
-    border-radius: 8px;
+.badge {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.badge.lua { background: rgba(0, 0, 255, 0.2); color: #8888ff; }
+.badge.js { background: rgba(255, 255, 0, 0.2); color: #ffff88; }
+.badge.py { background: rgba(0, 255, 0, 0.2); color: #88ff88; }
+
+.discord-card {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.join-btn {
+    background: #23a559;
+    color: white;
+    text-decoration: none;
+    padding: 6px 14px;
+    border-radius: 4px;
     font-size: 13px;
-    cursor: pointer;
-    transition: 0.2s;
-    text-align: left;
-    outline: none;
+    font-weight: 600;
+    transition: background 0.2s;
 }
 
-.controls div:hover, .controls button:hover, .menu-item:hover, .terminal-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+.join-btn:hover { background: #1a7a42; }
+
+.music-player {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
 }
 
-/* RWD - Dostosowanie na telefony */
-@media (max-width: 600px) {
-    .container, .profile-card, .card {
-        width: 95%;
-        padding: 20px;
-    }
-    
-    .header, .profile-header {
-        flex-direction: column;
-        align-items: flex-start;
-        text-align: left;
-    }
+.music-icon {
+    width: 40px;
+    height: 40px;
+    background: #111;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
 
-    .controls, .side-menu, .terminal-controls {
-        position: relative;
-        top: 0;
-        left: 0;
-        flex-direction: row;
-        flex-wrap: wrap;
-        justify-content: center;
-        margin-bottom: 20px;
-        width: 100%;
-    }
+.music-info {
+    flex: 1;
+}
+
+.music-title { font-weight: 600; font-size: 14px; }
+.music-artist { color: #949ba4; font-size: 12px; }
+
+.progress-bar {
+    width: 100%;
+    height: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+    margin-top: 8px;
+    position: relative;
+}
+
+.progress-fill {
+    width: 30%;
+    height: 100%;
+    background: #024442;
+    border-radius: 2px;
 }
