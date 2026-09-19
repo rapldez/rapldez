@@ -1,4 +1,35 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // --- PŁYNNA ANIMACJA IKONY (bmw.gif) ORAZ TYTUŁU ---
+    const titleText = "@rapldez";
+    let titleIndex = 0;
+    let isDeleting = false;
+
+    let favicon = document.querySelector("link[rel*='icon']") || document.createElement('link');
+    favicon.type = 'image/gif';
+    favicon.rel = 'icon';
+    favicon.href = 'bmw.gif';
+    document.head.appendChild(favicon);
+
+    function animateTitle() {
+        if (!isDeleting) {
+            titleIndex++;
+            document.title = titleText.substring(0, titleIndex);
+            if (titleIndex === titleText.length) {
+                setTimeout(() => { isDeleting = true; animateTitle(); }, 1800);
+                return;
+            }
+        } else {
+            titleIndex--;
+            document.title = titleText.substring(0, titleIndex) || "\u200B";
+            if (titleIndex === 0) {
+                setTimeout(() => { isDeleting = false; animateTitle(); }, 600);
+                return;
+            }
+        }
+        setTimeout(animateTitle, isDeleting ? 120 : 180);
+    }
+    animateTitle();
+
     const enterScreen = document.getElementById('enter-screen');
     const mainContent = document.getElementById('main-content');
     const bgAudio = document.getElementById('bg-audio');
@@ -81,7 +112,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('toast-container');
         if (!container) return;
         
-        // Czyszczenie poprzednich dymków, żeby nie robił się spam
         container.innerHTML = '';
 
         const toast = document.createElement('div');
@@ -423,29 +453,4 @@ document.addEventListener('DOMContentLoaded', () => {
     fetch('/api/views').then(res => res.json()).then(data => {
         if (data.views) document.getElementById('live-counter').innerText = data.views;
     }).catch(err => {});
-
-    // --- ANIMACJA TYTUŁU STRONY (TYPEWRITER) ---
-    const titleText = "@rapldez";
-    let titleIndex = 0;
-    let isDeleting = false;
-    
-    function animateTitle() {
-        if (!isDeleting) {
-            titleIndex++;
-            document.title = titleText.substring(0, titleIndex);
-            if (titleIndex === titleText.length) {
-                setTimeout(() => { isDeleting = true; animateTitle(); }, 1500);
-                return;
-            }
-        } else {
-            titleIndex--;
-            document.title = titleText.substring(0, titleIndex) || "\u200B";
-            if (titleIndex === 0) {
-                setTimeout(() => { isDeleting = false; animateTitle(); }, 500);
-                return;
-            }
-        }
-        setTimeout(animateTitle, isDeleting ? 100 : 200);
-    }
-    animateTitle();
 });
