@@ -1461,7 +1461,7 @@ client.on('messageDelete', async message => {
 
     // Tworzymy czytelny komunikat o ghost pingu
     const logEmbed = {
-        color: 0xffcc00,
+        color: 0xffffff,
         title: '👻 Wykryto Ghost Ping!',
         fields: [
             { name: 'Autor wiadomości', value: `${message.author.tag} (${message.author.id})`, inline: true },
