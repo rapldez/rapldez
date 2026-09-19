@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -50,72 +50,21 @@ app.post('/api/kontakt', async (req, res) => {
     try {
         const guild = client.guilds.cache.get(SERVER_ID);
         if (!guild) {
-            console.error("Błąd: Bot nie widzi serwera o ID:", SERVER_ID);
             return res.status(500).json({ message: 'Wystąpił błąd po stronie serwera.' });
         }
 
-        const inputClean = nick.toLowerCase().trim();
-        let member = null;
-
-        console.log(`[SZUKANIE] Zapytanie: "${inputClean}"`);
-
-        // 1. Twarde szukanie bezpośrednio po ID API Discorda (najskuteczniejsze)
-        if (/^\d{17,20}$/.test(inputClean)) {
-            try {
-                member = await guild.members.fetch(inputClean);
-                console.log(`[SUKCES] Znaleziono po ID bezpośrednio w API Discorda.`);
-            } catch (err) {
-                console.log(`[BŁĄD] API Discorda odrzuciło to ID. Użytkownika nie ma na serwerze.`);
-            }
-        } else {
-            // 2. Tradycyjne szukanie po nicku
-            try {
-                const searchResults = await guild.members.fetch({ query: inputClean, limit: 10 });
-                member = searchResults.find(m => 
-                    m.user.username.toLowerCase() === inputClean || 
-                    (m.user.globalName && m.user.globalName.toLowerCase() === inputClean) ||
-                    (m.nickname && m.nickname.toLowerCase() === inputClean)
-                );
-
-                if (!member) {
-                    const allMembers = await guild.members.fetch(); 
-                    member = allMembers.find(m => 
-                        m.user.username.toLowerCase() === inputClean || 
-                        (m.user.globalName && m.user.globalName.toLowerCase() === inputClean) ||
-                        (m.nickname && m.nickname.toLowerCase() === inputClean)
-                    );
-                }
-            } catch (fetchError) {
-                console.error("Błąd podczas wyszukiwania użytkownika po nicku:", fetchError);
-            }
-        }
-
-        if (!member) {
-            console.log(`[BŁĄD KRYTYCZNY] Nikogo takiego nie ma na serwerze.`);
-            return res.status(403).json({ 
-                message: 'Nie znaleziono Cię. Wpisz swoje ID (same cyfry) - to działa zawsze w 100%!' 
-            });
-        }
-
-        console.log(`[SUKCES] Znaleziono użytkownika: ${member.user.tag} (ID: ${member.id})`);
-
+        // Kanał widoczny tylko dla administracji/dla Ciebie
         const permissionOverwrites = [
             {
                 id: guild.id,
                 deny: [PermissionsBitField.Flags.ViewChannel],
-            },
-            {
-                id: member.id,
-                allow: [
-                    PermissionsBitField.Flags.ViewChannel, 
-                    PermissionsBitField.Flags.SendMessages, 
-                    PermissionsBitField.Flags.ReadMessageHistory,
-                    PermissionsBitField.Flags.AttachFiles
-                ],
             }
         ];
 
-        const channelName = `ticket-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+        // Bezpieczna nazwa kanału bez znaków specjalnych
+        const safeNick = nick.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 16) || 'nieznany';
+        const channelName = `ticket-${safeNick}`;
+        
         const newChannel = await guild.channels.create({
             name: channelName,
             type: ChannelType.GuildText,
@@ -123,17 +72,12 @@ app.post('/api/kontakt', async (req, res) => {
             permissionOverwrites: permissionOverwrites
         });
 
-        const avatarUrl = member.user.displayAvatarURL({ dynamic: true });
-
         const embed = new EmbedBuilder()
             .setColor('#111214')
-            .setAuthor({ name: '🎫 RAPLDEZ • ZGŁOSZENIE', iconURL: avatarUrl })
-            .setThumbnail(avatarUrl)
+            .setAuthor({ name: '🎫 RAPLDEZ • ZGŁOSZENIE ZE STRONY WWW' })
             .setDescription(`
 **• 👤 × Informacje o nadawcy:**
-\`—\` **× Ping:** <@${member.id}>
-\`—\` **× Nick:** \`${member.user.username}\`
-\`—\` **× ID:** \`${member.id}\`
+\`—\` **× Nick ze strony:** \`${nick}\`
 
 **• 📩 × Informacje o zgłoszeniu:**
 \`—\` **× Temat:** \`${subject}\`
@@ -143,12 +87,45 @@ app.post('/api/kontakt', async (req, res) => {
             .setFooter({ text: 'rapldez OS • System zgłoszeń' })
             .setTimestamp();
 
-        await newChannel.send({ content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie od <@${member.id}>!`, embeds: [embed] });
+        // Dodanie przycisku do zamknięcia
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('close_ticket')
+                    .setLabel('Zamknij Ticket')
+                    .setStyle(ButtonStyle.Danger)
+                    .setEmoji('🔒')
+            );
+
+        // Oznaczenie Ciebie bezpośrednio, abyś wiedział, że formularz przyszedł
+        await newChannel.send({ 
+            content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie!`, 
+            embeds: [embed],
+            components: [row]
+        });
+        
         res.status(200).json({ message: 'Zgłoszenie utworzone pomyślnie!' });
 
     } catch (error) {
         console.error("Błąd przy tworzeniu ticketa:", error);
         res.status(500).json({ message: 'Wystąpił błąd podczas tworzenia kanału.' });
+    }
+});
+
+// Obsługa przycisku zamykania ticketa
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isButton()) return;
+
+    if (interaction.customId === 'close_ticket') {
+        if (interaction.user.id !== YOUR_DISCORD_ID && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+            return interaction.reply({ content: 'Tylko administrator może zamknąć ten kanał.', ephemeral: true });
+        }
+
+        await interaction.reply({ content: 'Kanał zostanie usunięty za 5 sekund...' });
+        
+        setTimeout(() => {
+            interaction.channel.delete().catch(err => console.error("Nie mogłem usunąć kanału:", err));
+        }, 5000);
     }
 });
 
