@@ -31,19 +31,19 @@ const YOUR_DISCORD_ID = '920029957739139083';
 const LOG_CHANNEL_ID = '1550753070726512730'; 
 const TERMINAL_LOG_CHANNEL = '1550789490518528010';
 
-// --- FUNKCJE POMOCNICZE (NOWE EMBEDY LOGÓW) ---
-async function logToTerminalDiscord(title, description, color = '#2b2d31') {
+// --- FUNKCJE POMOCNICZE (NOWE EMBEDY LOGÓW #024442) ---
+async function logToTerminalDiscord(title, description) {
     try {
         const channel = client.channels.cache.get(TERMINAL_LOG_CHANNEL);
         if (!channel) return;
         
         const embed = new EmbedBuilder()
-            .setColor(color)
-            .setAuthor({ name: '💻 TERMINAL WWW • LOGI' })
+            .setColor('#024442')
+            .setAuthor({ name: '💻 PANEL ADMINISTRACYJNY' })
             .setTitle(title)
             .setDescription(description)
             .setTimestamp()
-            .setFooter({ text: 'rapldez OS • Nasłuch na żywo' });
+            .setFooter({ text: 'rapldez.onrender.com • System Logowania' });
             
         await channel.send({ embeds: [embed] });
     } catch (e) {
@@ -143,10 +143,10 @@ app.get('/auth/discord/callback', async (req, res) => {
 
         if (userData.id === YOUR_DISCORD_ID) {
             req.session.user = { id: userData.id, username: userData.username };
-            logToTerminalDiscord('🔐 Autoryzacja udana', 'Panel roota został pomyślnie odblokowany.', '#23a559');
+            logToTerminalDiscord('🛡️ Autoryzacja udana', `Panel Admina został pomyślnie odblokowany przez **${userData.username}**.`);
             return res.redirect('/?login=success');
         } else {
-            logToTerminalDiscord('⚠️ Odrzucono logowanie', `Zablokowano próbę dostępu do panelu.\n**Konto:** \`${userData.username}\`\n**ID:** \`${userData.id}\``, '#ed4245');
+            logToTerminalDiscord('⚠️ Zablokowano dostęp', `Odrzucono próbę autoryzacji do systemu.\n**Przechwycony profil:** \`${userData.username}\` (${userData.id})`);
             return res.redirect('/?error=unauthorized');
         }
     } catch (error) {
@@ -251,18 +251,18 @@ app.post('/api/terminal', async (req, res) => {
     const cmd = req.body.command ? req.body.command.trim() : '';
 
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) {
-        logToTerminalDiscord('🚫 Blokada autoryzacji', `Użytkownik bez uprawnień próbował wywołać komendę.\n**Wpisano:** \`${cmd || '[Puste]'}\`\n**IP:** \`${req.ip || 'Nieznane'}\``, '#ed4245');
+        logToTerminalDiscord('🚫 Blokada zabezpieczeń', `Zablokowano próbę wykonania polecenia bez uprawnień roota.\n**Wpisano:** \`${cmd || '[Puste]'}\`\n**Adres IP:** \`${req.ip || 'Nieznane'}\``);
         return res.status(403).json({ output: 'Odmowa dostępu. Brak autoryzacji roota.' });
     }
 
-    logToTerminalDiscord('⌨️ Wprowadzono komendę', `Root wywołał polecenie w terminalu na stronie:\n\`\`\`bash\n${cmd || '[Puste polecenie]'}\n\`\`\``, '#5865F2');
+    logToTerminalDiscord('⌨️ Wykonano polecenie', `Administrator wywołał komendę w terminalu WWW:\n\`\`\`bash\n${cmd || '[Puste]'}\n\`\`\``);
 
     const cmdLower = cmd.toLowerCase();
 
     if (cmdLower === 'sysinfo') {
         const mem = Math.round(process.memoryUsage().rss / 1024 / 1024);
         const uptime = Math.floor(process.uptime());
-        return res.json({ output: `System Uptime: ${uptime}s | RAM Usage: ${mem}MB | WS Ping: ${client.ws.ping}ms` });
+        return res.json({ output: `System Uptime: ${uptime}s | RAM Usage: ${mem}MB \vert{} WS Ping:${client.ws.ping}ms` });
     }
     
     if (cmdLower === 'db stats') {
@@ -282,10 +282,10 @@ app.post('/api/terminal', async (req, res) => {
 
 app.post('/api/reboot', (req, res) => {
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) {
-        logToTerminalDiscord('🚫 Zablokowano restart', `Próba wymuszenia restartu bez uprawnień (IP: \`${req.ip || 'Nieznane'}\`).`, '#ed4245');
+        logToTerminalDiscord('🚫 Zablokowano restart', `Próba wymuszenia restartu serwera bez uprawnień roota.\n**Adres IP:** \`${req.ip || 'Nieznane'}\``);
         return res.status(403).json({ error: 'Brak uprawnień' });
     }
-    logToTerminalDiscord('🔄 Restart systemu', `Zlecono polecenie \`reboot\`. Zamykanie procesów...`, '#fee75c');
+    logToTerminalDiscord('🔄 Zdalny restart', `Administrator wymusił polecenie \`reboot\`. Zamykanie procesów chmury...`);
     res.json({ message: 'Restart...' });
     setTimeout(() => process.exit(1), 1000);
 });
@@ -310,7 +310,7 @@ client.on('messageCreate', async message => {
 
         if (deleted) {
             const fb = new EmbedBuilder()
-                .setColor('#23a559')
+                .setColor('#024442')
                 .setDescription(`🧹 **Teren czysty!**\nUsunięto \`${deleted.size}\` wiadomości na polecenie administratora.`);
             const msg = await message.channel.send({ embeds: [fb] });
             setTimeout(() => msg.delete().catch(() => null), 4000);
@@ -437,20 +437,19 @@ client.on('interactionCreate', async interaction => {
                 htmlContent: htmlContent
             });
 
-            // Przywrócony zwarty wygląd archiwalnego embeda z lepszym kontrastem
             const embedLog = new EmbedBuilder()
-                .setColor('#23a559')
-                .setAuthor({ name: '📁 RAPLDEZ OS • ARCHIWUM ZGŁOSZENIA' })
+                .setColor('#024442')
+                .setAuthor({ name: '📁 ARCHIWUM ZGŁOSZENIA' })
                 .setDescription(
-                    `>>> **• Nazwa kanału:** \`${interaction.channel.name}\`\n` +
-                    `**• Ilość wiadomości:** \`${messages.length}\`\n` +
+                    `>>> **• Kanał:** \`${interaction.channel.name}\`\n` +
+                    `**• Wiadomości:** \`${messages.length}\`\n` +
                     `**• Uczestnicy:** \`${participantsList}\`\n` +
                     `**• Otwarcie:** \`${createdAtStr}\`\n` +
                     `**• Zamknięcie:** \`${closedAtStr}\`\n` +
                     `**• Archiwizacja:** \`${archivedAtStr}\`\n` +
                     `**• Zarchiwizował:** <@${interaction.user.id}>`
                 )
-                .setFooter({ text: 'Zapisano w bazie MongoDB' })
+                .setFooter({ text: 'rapldez.onrender.com • Baza Danych MongoDB' })
                 .setTimestamp();
 
             const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
