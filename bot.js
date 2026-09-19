@@ -99,6 +99,16 @@ const giveawaySchema = new mongoose.Schema({
 });
 const Giveaway = mongoose.model('Giveaway', giveawaySchema);
 
+// Schemat ankiet w bazie danych
+const pollSchema = new mongoose.Schema({
+    messageId: String,
+    question: String,
+    options: [String],
+    votes: { type: Map, of: Number, default: {} }, // userId -> optionIndex
+    voters: { type: Map, of: Number, default: {} }   // userId -> optionIndex
+});
+const Poll = mongoose.model('Poll', pollSchema);
+
 let dbStatus = 'Rozłączono';
 if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
@@ -592,6 +602,75 @@ client.on('messageCreate', async message => {
         return;
     }
 
+    // --- KOMENDA: INTERAKTYWNA ANKIETA (!poll) ---
+    if (message.content.startsWith('!poll') && message.author.id === YOUR_DISCORD_ID) {
+        const argsText = message.content.substring(5).trim();
+        const parts = argsText.split('|').map(p => p.trim()).filter(Boolean);
+
+        if (parts.length < 3) {
+            return message.reply('❌ Użycie: `!poll Pytanie | Opcja 1 | Opcja 2` (minimum 2 opcje)');
+        }
+
+        const question = parts[0];
+        const options = parts.slice(1, 6); // Maksymalnie 5 opcji dla przycisków w rzędzie
+
+        await message.delete().catch(() => {});
+
+        const generatePollDescription = (options, votesMap) => {
+            let totalVotes = 0;
+            const counts = options.map((_, idx) => {
+                let c = 0;
+                if (votesMap) {
+                    for (const optIdx of votesMap.values()) {
+                        if (optIdx === idx) c++;
+                    }
+                }
+                totalVotes += c;
+                return c;
+            });
+
+            let desc = `>>> **❓ Pytanie:** \`${question}\`\n\n`;
+            options.forEach((opt, idx) => {
+                const count = counts[idx];
+                const percent = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+                const filled = Math.round(percent / 10);
+                const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+                desc += `**${idx + 1}.**${opt}\n\`${bar}\` **${percent}%** (\`${count} głosów\`)\n\n`;
+            });
+            desc += `**• Łącznie głosów:** \`${totalVotes}\``;
+            return desc;
+        };
+
+        const pollEmbed = new EmbedBuilder()
+            .setColor(MAIN_COLOR)
+            .setAuthor({ name: '📊 RAPLDEZ OS • SYSTEM ANKIET' })
+            .setDescription(generatePollDescription(options, new Map()))
+            .setFooter({ text: 'rapldez OS • Głosuj za pomocą przycisków' })
+            .setTimestamp();
+
+        const row = new ActionRowBuilder();
+        options.forEach((_, idx) => {
+            row.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`poll_vote_${idx}`)
+                    .setLabel(`${idx + 1}`)
+                    .setStyle(ButtonStyle.Secondary)
+            );
+        });
+
+        const pollMsg = await message.channel.send({ embeds: [pollEmbed], components: [row] });
+
+        await Poll.create({
+            messageId: pollMsg.id,
+            question: question,
+            options: options,
+            votes: {},
+            voters: {}
+        });
+
+        return;
+    }
+
     const voiceCommands = ['!lock', '!unlock', '!permit', '!reject', '!limit', '!name'];
     const firstWord = message.content.split(' ')[0].toLowerCase();
 
@@ -992,9 +1071,66 @@ client.once('ready', async () => {
     }
 });
 
-// --- INTERAKCJE (PRZYCISKI, GIVEAWAY, TICKETY) ---
+// --- INTERAKCJE (PRZYCISKI, GIVEAWAY, TICKETY, ANKIETY) ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
+
+    // Obsługa głosowania w ankietach
+    if (interaction.customId.startsWith('poll_vote_')) {
+        try {
+            const optionIndex = parseInt(interaction.customId.split('_')[2]);
+            const poll = await Poll.findOne({ messageId: interaction.message.id });
+
+            if (!poll) {
+                return interaction.reply({ content: '❌ Ta ankieta już nie istnieje w bazie.', ephemeral: true });
+            }
+
+            const userId = interaction.user.id;
+            const currentVotes = poll.votes instanceof Map ? poll.votes : new Map(Object.entries(poll.votes || {}));
+            
+            // Zapisz lub zmień głos użytkownika
+            currentVotes.set(userId, optionIndex);
+            poll.votes = currentVotes;
+            await poll.save();
+
+            const generatePollDescription = (options, votesMap) => {
+                let totalVotes = 0;
+                const counts = options.map((_, idx) => {
+                    let c = 0;
+                    for (const optIdx of votesMap.values()) {
+                        if (optIdx === idx) c++;
+                    }
+                    totalVotes += c;
+                    return c;
+                });
+
+                let desc = `>>> **❓ Pytanie:** \`${poll.question}\`\n\n`;
+                options.forEach((opt, idx) => {
+                    const count = counts[idx];
+                    const percent = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+                    const filled = Math.round(percent / 10);
+                    const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+                    desc += `**${idx + 1}.**${opt}\n\`${bar}\` **${percent}%** (\`${count} głosów\`)\n\n`;
+                });
+                desc += `**• Łącznie głosów:** \`${totalVotes}\``;
+                return desc;
+            };
+
+            const originalEmbed = interaction.message.embeds[0];
+            const updatedEmbed = new EmbedBuilder()
+                .setColor(originalEmbed.color || MAIN_COLOR)
+                .setAuthor(originalEmbed.author ? { name: originalEmbed.author.name } : { name: '📊 RAPLDEZ OS • SYSTEM ANKIET' })
+                .setDescription(generatePollDescription(poll.options, currentVotes))
+                .setFooter({ text: 'rapldez OS • Głosuj za pomocą przycisków' })
+                .setTimestamp(new Date(originalEmbed.timestamp || Date.now()));
+
+            await interaction.update({ embeds: [updatedEmbed] });
+            return interaction.followUp({ content: `✅ Twój głos został zapisany na opcję **nr ${optionIndex + 1}**!`, ephemeral: true });
+        } catch (e) {
+            console.error('Błąd ankiety:', e);
+            return interaction.reply({ content: '❌ Wystąpił błąd podczas rejestrowania głosu.', ephemeral: true });
+        }
+    }
 
     if (interaction.customId === 'join_giveaway') {
         try {
