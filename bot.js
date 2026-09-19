@@ -177,89 +177,6 @@ app.get('/p/:id', async (req, res) => {
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
-    // --- SYSTEM TESTÓW EMBEDÓW (1 do 5) ---
-    if (message.content.startsWith('!test-') && message.author.id === YOUR_DISCORD_ID) {
-        const packNum = message.content.split('-')[1];
-        let embeds = [];
-
-        if (packNum === '1') {
-            embeds = [
-                createLogEmbed('💻 TERMINAL: Autoryzacja udana', 'Panel odblokowany przez **rapldez**.\n**IP:** `192.168.1.1`'),
-                createLogEmbed('💻 TERMINAL: Odrzucono ruch (VPN)', 'Zablokowano próbę wejścia z ukrytego IP.\n**IP:** `185.22.45.11`'),
-                createLogEmbed('💻 TERMINAL: Wykonano polecenie', '**Komenda:** `sysinfo`'),
-                createLogEmbed('⚠️ Krytyczny Błąd Systemu', 'Wykryto awarię aplikacji na Renderze.'),
-                createLogEmbed('🟢 SYSTEM OPERACYJNY ONLINE', '**Status:** Stabilny\n**Ping:** `45ms`'),
-                createLogEmbed('📁 ARCHIWUM ZGŁOSZENIA', `**Kanał:** \`ticket-test\`\n**Zarchiwizował:** <@${YOUR_DISCORD_ID}>`),
-                createLogEmbed('🎫 NOWE ZGŁOSZENIE (Strona WWW)', '**Nadawca:** Użytkownik\n**Temat:** Pytanie'),
-                createLogEmbed('⚙️ Aktualizacja ustawień', 'Zmieniono nazwę lub ikonę serwera.'),
-                createLogEmbed('🛠️ Użycie komendy moderacyjnej', `<@${YOUR_DISCORD_ID}> użył komendy na kanale <#${message.channel.id}>.`),
-                createLogEmbed('⚠️ Nadano ostrzeżenie', `**Administrator:** <@${YOUR_DISCORD_ID}>\n**Ukarany:** <@123456>\n**Powód:** Złamanie regulaminu.`)
-            ];
-            await message.channel.send({ content: '**[1/5] System, Terminal, Tickety i Podstawy**', embeds });
-        }
-        else if (packNum === '2') {
-            embeds = [
-                createLogEmbed('🔨 Zbanowanie członka', 'Użytkownik `Troll#1234` otrzymał bana na serwerze.'),
-                createLogEmbed('🕊️ Odbanowanie członka', 'Użytkownik `Troll#1234` został odbanowany.'),
-                createLogEmbed('👢 Wyrzucenie członka (Kick)', 'Administrator usunął użytkownika z serwera.'),
-                createLogEmbed('⏳ Timeout (Wyciszenie/Przerwa)', `<@123456> otrzymał przerwę na pisanie.`),
-                createLogEmbed('⏳ Timeout zdjęty', `<@123456> odzyskał możliwość pisania.`),
-                createLogEmbed('🧹 Masowe czyszczenie (Purge)', `Usunięto \`50\` wiadomości na kanale <#${message.channel.id}>.`),
-                createLogEmbed('🛡️ Akcja AutoMod', `Zablokowano wiadomość z powodu naruszenia zasad.`),
-                createLogEmbed('🛑 Wykrycie spamu', `System zatrzymał masowe wysyłanie wiadomości.`),
-                createLogEmbed('🔗 Wykrycie zablokowanych linków', `Usunięto wiadomość z podejrzanym linkiem.`),
-                createLogEmbed('🔀 Przełączenie kanału głosowego', `Członek został przeniesiony z <#111> na <#222>.`)
-            ];
-            await message.channel.send({ content: '**[2/5] Moderacja, Kary i AutoMod**', embeds });
-        }
-        else if (packNum === '3') {
-            embeds = [
-                createLogEmbed('📥 Dołączenie członka', `Konto utworzono 2 lata temu.`),
-                createLogEmbed('⚠️ Wykryto młode konto (Alt Account)', `Uwaga: Konto utworzone zaledwie wczoraj.`),
-                createLogEmbed('📤 Opuszczenie serwera', `Członek opuścił serwer.`),
-                createLogEmbed('📝 Zmiana pseudonimu', `Nick został zaktualizowany na serwerze.`),
-                createLogEmbed('🏷️ Zmiana nazwy globalnej', `Użytkownik zmienił swój główny Discord Tag.`),
-                createLogEmbed('🖼️ Zmiana awatara', `Użytkownik zaktualizował swoje zdjęcie profilowe.`),
-                createLogEmbed('➕ Nadanie roli', `Otrzymał rolę: <@&111222>`),
-                createLogEmbed('➖ Odebranie roli', `Stracił rolę: <@&111222>`),
-                createLogEmbed('🔊 Dołączenie do kanału głosowego', `Członek wszedł na kanał VC.`),
-                createLogEmbed('🔇 Opuszczenie kanału głosowego', `Członek opuścił kanał VC.`)
-            ];
-            await message.channel.send({ content: '**[3/5] Użytkownicy, Profile i VC**', embeds });
-        }
-        else if (packNum === '4') {
-            embeds = [
-                createLogEmbed('📁 Utworzenie kanału', `Dodano nowy kanał tekstowy.`),
-                createLogEmbed('🗑️ Usunięcie kanału', `Kanał został trwale usunięty.`),
-                createLogEmbed('🔄 Aktualizacja kanału / Nazwy', `Zmieniono właściwości kanału.`),
-                createLogEmbed('🔐 Zmiana uprawnień kanału', `Zaktualizowano dostęp do kanału.`),
-                createLogEmbed('🛡️ Utworzenie roli', `Nowa rola pojawiła się w systemie.`),
-                createLogEmbed('🗑️ Usunięcie roli', `Rola została skasowana.`),
-                createLogEmbed('🔄 Aktualizacja uprawnień roli', `Edytowano permisje dla roli.`),
-                createLogEmbed('📅 Utworzenie wydarzenia', `Zaplanowano event na serwerze.`),
-                createLogEmbed('❌ Anulowanie/Zakończenie wydarzenia', `Wydarzenie dobiegło końca.`),
-                createLogEmbed('🔗 Stworzenie zaproszenia', `Wygenerowano nowy link zaproszeniowy do serwera.`)
-            ];
-            await message.channel.send({ content: '**[4/5] Kanały, Role, Eventy i Zaproszenia**', embeds });
-        }
-        else if (packNum === '5') {
-            embeds = [
-                createLogEmbed('🗑️ Usunięcie wiadomości', `**Treść:** To jest testowo skasowana wiadomość.`),
-                createLogEmbed('✏️ Edycja wiadomości', `**Przed:** Cześć\n**Po:** Witam serdecznie`),
-                createLogEmbed('🖼️ Usunięcie obrazka / pliku', `Wiadomość z załącznikiem została skasowana.`),
-                createLogEmbed('📌 Przypięcie wiadomości', `Przypięto ważną informację do kanału.`),
-                createLogEmbed('📍 Odpięcie wiadomości', `Odpięto przestarzałą wiadomość.`),
-                createLogEmbed('😀 Aktualizacja emotki/naklejki', `Utworzono lub zmodyfikowano serwerową grafikę.`),
-                createLogEmbed('🪝 Aktualizacja Webhooka', `Dodano nową integrację (Webhook) na kanale.`),
-                createLogEmbed('💎 Zmiana poziomu ulepszeń', `Serwer wszedł na wyższy poziom Boosta!`),
-                createLogEmbed('🎙️ Status aktywności głosowej', `Użytkownik został wyciszony serwerowo.`),
-                createLogEmbed('🔌 Rozłączenie z VC (Disconnect)', `Admin przymusowo wyrzucił członka z kanału VC.`)
-            ];
-            await message.channel.send({ content: '**[5/5] Wiadomości, Emotki, Narzędzia Głosowe i Boosty**', embeds });
-        }
-        return;
-    }
-
     if (message.content.startsWith('!clear') && message.author.id === YOUR_DISCORD_ID) {
         const amount = parseInt(message.content.split(' ')[1]);
         if (isNaN(amount) || amount < 1 || amount > 100) return message.reply('Podaj liczbę (1-100)').then(m => setTimeout(() => m.delete().catch(()=>null), 3000));
@@ -283,9 +200,40 @@ client.on('messageCreate', async message => {
         sendServerLog('⚠️ Nadano ostrzeżenie', `**Admin:** <@${message.author.id}>\n**Ukarany:** <@${targetUser.id}>\n**Powód:** ${reason}`);
     }
 
+    if (message.content.startsWith('!clone-role') && message.author.id === YOUR_DISCORD_ID) {
+        const args = message.content.split(' ');
+        const targetRole = message.mentions.roles.first() || message.guild.roles.cache.get(args[1]);
+        const newName = args.slice(2).join(' ') || `${targetRole.name} - Kopia`;
+        if (!targetRole) return message.reply('Oznacz rolę do sklonowania: `!clone-role @rola Nowa Nazwa`');
+        try {
+            const cloned = await message.guild.roles.create({
+                name: newName, color: targetRole.color, hoist: targetRole.hoist,
+                permissions: targetRole.permissions, mentionable: targetRole.mentionable
+            });
+            message.reply(`✅ Rola sklonowana pomyślnie: <@&${cloned.id}>`);
+        } catch (err) { message.reply('Błąd podczas klonowania.'); }
+    }
+
     if (message.content === '!backup' && message.author.id === YOUR_DISCORD_ID) {
         const data = JSON.stringify({ statystyki: await Counter.find(), archiwum_ticketow: await TicketArchive.find() }, null, 2);
         await message.reply({ content: '📦 **Backup:**', files: [new AttachmentBuilder(Buffer.from(data, 'utf-8'), { name: `backup_${Date.now()}.json` })] });
+    }
+
+    if (message.content.startsWith('!embed') && message.author.id === YOUR_DISCORD_ID) {
+        const rawArgs = message.content.replace('!embed', '').trim();
+        if (!rawArgs) return;
+        const parts = rawArgs.split('|');
+        const embedData = {};
+        parts.forEach(part => {
+            const index = part.indexOf('=');
+            if (index !== -1) embedData[part.substring(0, index).trim().toLowerCase()] = part.substring(index + 1).trim();
+        });
+        const embed = new EmbedBuilder().setColor(MAIN_COLOR);
+        if (embedData.title) embed.setTitle(embedData.title);
+        if (embedData.desc) embed.setDescription(embedData.desc.replace(/\\n/g, '\n'));
+        if (embedData.footer) embed.setFooter({ text: embedData.footer });
+        await message.channel.send({ embeds: [embed] });
+        await message.delete().catch(() => null);
     }
 });
 
@@ -348,13 +296,14 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
     if (interaction.customId === 'close_ticket') {
         const closedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+        await interaction.channel.setTopic(`${interaction.channel.topic}|CLOSED:${closedAtStr}`).catch(()=>null);
         await interaction.reply({ content: `🔒 Zamknięto (${closedAtStr}).`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj').setStyle(ButtonStyle.Danger))] });
     }
     if (interaction.customId === 'archive_ticket') {
         await interaction.reply('📁 Generuję archiwum...');
         setTimeout(() => interaction.channel.delete().catch(()=>null), 4000);
         const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-        if (logChannel) await logChannel.send({ embeds: [createLogEmbed('📁 ARCHIWUM ZGŁOSZENIA', `Kanał: \`${interaction.channel.name}\` zarchiwizowany.`)] });
+        if (logChannel) await logChannel.send({ embeds: [createLogEmbed('📁 ARCHIWUM ZGŁOSZENIA', `Kanał: \`${interaction.channel.name}\` zarchiwizowany przez <@${interaction.user.id}>.`)] });
     }
 });
 
