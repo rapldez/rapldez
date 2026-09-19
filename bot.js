@@ -19,7 +19,7 @@ app.use(session({
     secret: 'rapldez_super_secret_key_997',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24h sesji
+    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
 }));
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -87,7 +87,6 @@ app.get('/auth/discord/callback', async (req, res) => {
 
         const userData = await userResponse.json();
 
-        // BEZPIECZEŃSTWO: Sprawdzamy czy to Twoje unikalne ID
         if (userData.id === YOUR_DISCORD_ID) {
             req.session.user = {
                 id: userData.id,
@@ -243,34 +242,87 @@ app.post('/api/reboot', (req, res) => {
     setTimeout(() => { process.exit(1); }, 1000);
 });
 
-// --- KOMENDY NA DISCORDZIE ---
+// --- KOMENDY NA DISCORDZIE (Upiększony Kreator Embedów) ---
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
     if (message.content.startsWith('!embed') && message.author.id === YOUR_DISCORD_ID) {
         const rawArgs = message.content.replace('!embed', '').trim();
-        if (!rawArgs) return message.channel.send("Użyj: `!embed title=Tytuł | desc=Opis | color=#111214`");
+        
+        // Jeśli komenda jest pusta, wyślij ładnego, mrocznego embeda z instrukcją
+        if (!rawArgs) {
+            const helpEmbed = new EmbedBuilder()
+                .setColor('#111214')
+                .setAuthor({ name: '🛠️ RAPLDEZ • KREATOR EMBEDÓW' })
+                .setDescription(`
+**• 📌 × Instrukcja użycia:**
+Wpisz komendę, używając pionowej kreski (\`|\`) do oddzielenia elementów.
+
+**• ⚙️ × Dostępne parametry:**
+\`—\` \`title=...\` – Tytuł embeda
+\`—\` \`desc=...\` – Treść / Opis (możesz użyć \`\\n\` do nowej linijki)
+\`—\` \`color=#HEX\` – Kolor paska bocznego (np. \`#23a559\`)
+\`—\` \`author=...\` – Tekst w nagłówku (autor)
+\`—\` \`footer=...\` – Tekst w stopce
+\`—\` \`thumbnail=URL\` – Miniaturka w prawym górnym rogu
+\`—\` \`image=URL\` – Duży obraz na samym dole
+
+**• 💡 × Przykład:**
+\`!embed title=Witaj! | desc=Zasady serwera:\\n1. Kultura\\n2. Szacunek | color=#23a559 | footer=Regulamin\`
+                `)
+                .setFooter({ text: 'rapldez OS • Generator stylów' })
+                .setTimestamp();
+
+            await message.channel.send({ embeds: [helpEmbed] });
+            await message.delete().catch(() => null);
+            return;
+        }
 
         const parts = rawArgs.split('|');
         const embedData = {};
+        
         parts.forEach(part => {
             const index = part.indexOf('=');
             if (index !== -1) {
-                embedData[part.substring(0, index).trim().toLowerCase()] = part.substring(index + 1).trim();
+                const key = part.substring(0, index).trim().toLowerCase();
+                const value = part.substring(index + 1).trim();
+                embedData[key] = value;
             }
         });
 
         const embed = new EmbedBuilder();
-        if (embedData.title) embed.setTitle(embedData.title);
-        if (embedData.desc) embed.setDescription(embedData.desc.replace(/\\n/g, '\n'));
-        embed.setColor(embedData.color && /^#[0-9A-F]{6}$/i.test(embedData.color) ? embedData.color : '#111214');
+        let hasContent = false;
+        
+        if (embedData.title) { embed.setTitle(embedData.title); hasContent = true; }
+        if (embedData.desc) { embed.setDescription(embedData.desc.replace(/\\n/g, '\n')); hasContent = true; }
+        
+        if (embedData.color && /^#[0-9A-F]{6}$/i.test(embedData.color)) {
+            embed.setColor(embedData.color);
+        } else {
+            embed.setColor('#111214'); 
+        }
+
         if (embedData.footer) embed.setFooter({ text: embedData.footer });
         if (embedData.author) embed.setAuthor({ name: embedData.author });
-        if (embedData.image) embed.setImage(embedData.image);
-        if (embedData.thumbnail) embed.setThumbnail(embedData.thumbnail);
+        
+        try {
+            if (embedData.image) embed.setImage(embedData.image);
+            if (embedData.thumbnail) embed.setThumbnail(embedData.thumbnail);
+        } catch (e) {
+            console.log("Problem z załadowaniem grafiki.");
+        }
 
-        await message.channel.send({ embeds: [embed] });
-        await message.delete().catch(() => null);
+        if (!hasContent) {
+            embed.setDescription("⚠️ Zrobiłeś pusty embed! Musisz podać chociaż `title=` lub `desc=`.");
+        }
+
+        try {
+            await message.channel.send({ embeds: [embed] });
+            await message.delete().catch(() => null);
+        } catch (err) {
+            console.log("Błąd wysyłania embeda:", err);
+            message.channel.send("Wystąpił błąd. Sprawdź, czy linki do obrazków są poprawne.");
+        }
     }
 });
 
