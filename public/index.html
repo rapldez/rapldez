@@ -191,31 +191,5 @@
 
     <div id="toast-container" class="toast-container"></div>
     <script src="script.js"></script>
-
-<!-- Przyciski Admina -->
-<div class="admin-panel-buttons" id="root-controls" style="display: none;">
-    <button class="admin-btn" onclick="openTerminal()"><i class="fa-solid fa-terminal"></i> Terminal</button>
-    <button class="admin-btn" onclick="openEmbedBuilder()"><i class="fa-solid fa-wand-magic-sparkles"></i> Kreator Embedów</button>
-    <button class="admin-btn" onclick="logout()" style="border-color: #ed4245;"><i class="fa-solid fa-right-from-bracket"></i> Wyloguj</button>
-</div>
-
-<!-- Kreator Embedów Overlay -->
-<div id="embed-builder-overlay">
-    <div class="embed-window">
-        <div class="contact-header" style="background: rgba(255,255,255,0.05); padding: 12px 18px; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1);">
-            <span>Kreator Embedów na żywo</span>
-            <i class="fa-solid fa-xmark" onclick="closeEmbedBuilder()" style="cursor: pointer;"></i>
-        </div>
-        <div class="embed-body" style="padding: 20px; display: flex; flex-direction: column; gap: 12px;">
-            <input type="text" id="embed-channel" placeholder="ID Kanału Discord (wymagane)" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; color: white; outline: none;">
-            <input type="text" id="embed-title" placeholder="Tytuł Embedu (opcjonalnie)" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; color: white; outline: none;">
-            <textarea id="embed-desc" placeholder="Treść / Opis (wymagane, używaj \n dla nowej linii)" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; color: white; outline: none; height: 80px; resize: none;"></textarea>
-            <input type="text" id="embed-footer" placeholder="Stopka (opcjonalnie)" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; color: white; outline: none;">
-            <button id="send-builder-btn" onclick="sendEmbed()" style="background: #024442; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer;">Wyślij na Serwer</button>
-            <div id="embed-status" style="font-size: 12px; text-align: center; color: #23a559; height: 18px;"></div>
-        </div>
-    </div>
-</div>
-
 </body>
 </html>
