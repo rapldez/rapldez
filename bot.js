@@ -7,6 +7,19 @@ const session = require('express-session');
 const fetch = require('node-fetch');
 const app = express();
 
+// --- SPRAWDZANIE ZMIENNYCH ŚRODOWISKOWYCH (.env) ---
+const requiredEnv = ['BOT_TOKEN', 'MONGO_URI', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI'];
+const missingEnv = requiredEnv.filter(envName => !process.env[envName]);
+
+if (missingEnv.length > 0) {
+    console.error('============================================================');
+    console.error('❌ BŁĄD KRYTYCZNY: Brakuje następujących zmiennych środowiskowych:');
+    missingEnv.forEach(env => console.error(`   - ${env}`));
+    console.error('Uzupełnij je w pliku .env lub w panelu Render przed startem bota!');
+    console.error('============================================================');
+    process.exit(1);
+}
+
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
