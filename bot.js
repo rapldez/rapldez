@@ -89,7 +89,6 @@ const Warn = mongoose.model('Warn', warnSchema);
 const embedPresetSchema = new mongoose.Schema({ name: String, content: String, authorName: String, authorUrl: String, authorIcon: String, title: String, description: String, color: String, image: String, thumbnail: String, footer: String, footerIcon: String, timestamp: Boolean, buttons: Array });
 const EmbedPreset = mongoose.model('EmbedPreset', embedPresetSchema);
 
-// Schemat Giveaways
 const giveawaySchema = new mongoose.Schema({
     messageId: String,
     channelId: String,
@@ -290,7 +289,7 @@ app.post('/api/terminal', async (req, res) => {
         return res.json({ output: `Znaleziono słowo "${query}" w ticketach (${results.length}):\n${names}` });
     }
 
-    // KOMENDA: giveaway [channelId] [czas_w_min] [nagroda]
+    // KOMENDA GIVEAWAY - CZYSTE DYNAMICZNE ODLICZANIE CZASU
     if (cmdLower === 'giveaway') {
         const channelId = cmdArgs[1];
         const minutes = parseInt(cmdArgs[2]);
@@ -304,11 +303,13 @@ app.post('/api/terminal', async (req, res) => {
         if (!channel) return res.json({ output: 'Błąd: Nie znaleziono kanału o podanym ID.' });
 
         const endsAt = Date.now() + (minutes * 60 * 1000);
+        const unixTime = Math.floor(endsAt / 1000);
+
         const embed = new EmbedBuilder()
             .setColor(MAIN_COLOR)
-            .setAuthor({ name: '🎉 NOWY KONKURS (GIVEAWAY)' })
+            .setAuthor({ name: '🎉 ROZPOCZĘTO KONKURS (GIVEAWAY)' })
             .setTitle(prize)
-            .setDescription(`>>> **• Nagroda:** \`${prize}\`\n**• Koniec:** <t:${Math.floor(endsAt / 1000)}:R> (<t:${Math.floor(endsAt / 1000)}:f>)\n**• Uczestnicy:** \`0\`\n\nKliknij przycisk poniżej, aby wziąć udział!`)
+            .setDescription(`>>> **• Nagroda:** \`${prize}\`\n**• Zakończenie:** <t:${unixTime}:R>\n**• Dokładna data:** <t:${unixTime}:f>\n**• Uczestnicy:** \`0\`\n\nKliknij przycisk poniżej, aby dołączyć!`)
             .setFooter({ text: 'rapldez OS • Konkursy' })
             .setTimestamp();
 
@@ -471,7 +472,6 @@ const TIMEOUT_DURATION = 5 * 60 * 1000;
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
-    // --- SYSTEM ANTY-SPAM ---
     if (message.author.id !== YOUR_DISCORD_ID && !message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
         const userId = message.author.id;
         const currentTime = Date.now();
@@ -517,7 +517,6 @@ client.on('messageCreate', async message => {
             return; 
         }
     }
-    // --- KONIEC ANTY-SPAMU ---
 
     if (message.content.startsWith('!clear') && message.author.id === YOUR_DISCORD_ID) {
         const amount = parseInt(message.content.split(' ')[1]);
@@ -644,7 +643,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         if (!oldState.serverDeaf && newState.serverDeaf) sendServerLog('🎧 Ogłuszenie (Deafen)', `${user} ogłuszony serwerowo.`);
     }
 
-    // System "Stwórz swój głos" ze zmienioną nazwą
     try {
         if (newState.channelId === VOICE_CREATOR_CHANNEL_ID) {
             const guild = newState.guild;
@@ -743,7 +741,7 @@ client.on('roleDelete', r => sendServerLog('🗑️ Usunięcie roli', `Usunięto
 client.on('guildBanAdd', ban => sendServerLog('🔨 Zbanowanie członka', `Zbanowano \`${ban.user.tag}\`.`));
 client.on('guildBanRemove', ban => sendServerLog('🕊️ Odbanowanie członka', `Odbanowano \`${ban.user.tag}\`.`));
 
-// --- PETLA SPRAWDZAJĄCA ZAKOŃCZENIE GIVEAWAYÓW ---
+// --- PĘTLA SPRAWDZAJĄCA ZAKOŃCZENIE GIVEAWAYÓW ---
 setInterval(async () => {
     try {
         const activeGiveaways = await Giveaway.find({ ended: false, endsAt: { $lte: Date.now() } });
@@ -857,7 +855,7 @@ client.once('ready', async () => {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
-    // Przycisk dołączania do Giveawaya
+    // Przycisk dołączania do Giveawaya z poprawnym odświeżaniem opisu
     if (interaction.customId === 'join_giveaway') {
         try {
             const g = await Giveaway.findOne({ messageId: interaction.message.id, ended: false });
@@ -865,34 +863,34 @@ client.on('interactionCreate', async interaction => {
                 return interaction.reply({ content: '❌ Ten konkurs już się zakończył.', ephemeral: true });
             }
 
+            let left = false;
             if (g.participants.includes(interaction.user.id)) {
                 g.participants = g.participants.filter(id => id !== interaction.user.id);
-                await g.save();
-
-                const originalEmbed = interaction.message.embeds[0];
-                const updatedEmbed = EmbedBuilder.from(originalEmbed).setDescription(
-                    originalEmbed.description.replace(/\*\*• Uczestnicy:\*\* `\d+`/, `**• Uczestnicy:** \`${g.participants.length}\``)
-                );
-                await interaction.update({ embeds: [updatedEmbed] });
-                return interaction.followUp({ content: '👋 Opuściłeś losowanie.', ephemeral: true });
+                left = true;
             } else {
                 g.participants.push(interaction.user.id);
-                await g.save();
-
-                const originalEmbed = interaction.message.embeds[0];
-                const updatedEmbed = EmbedBuilder.from(originalEmbed).setDescription(
-                    originalEmbed.description.replace(/\*\*• Uczestnicy:\*\* `\d+`/, `**• Uczestnicy:** \`${g.participants.length}\``)
-                );
-                await interaction.update({ embeds: [updatedEmbed] });
-                return interaction.followUp({ content: '🎉 Zostałeś pomyślnie dodany do losowania! Powodzenia.', ephemeral: true });
             }
+            await g.save();
+
+            const unixTime = Math.floor(g.endsAt / 1000);
+            const originalEmbed = interaction.message.embeds[0];
+            
+            const updatedEmbed = new EmbedBuilder()
+                .setColor(originalEmbed.color || MAIN_COLOR)
+                .setAuthor(originalEmbed.author ? { name: originalEmbed.author.name } : { name: '🎉 ROZPOCZĘTO KONKURS (GIVEAWAY)' })
+                .setTitle(g.prize)
+                .setDescription(`>>> **• Nagroda:** \`${g.prize}\`\n**• Zakończenie:** <t:${unixTime}:R>\n**• Dokładna data:** <t:${unixTime}:f>\n**• Uczestnicy:** \`${g.participants.length}\`\n\nKliknij przycisk poniżej, aby dołączyć!`)
+                .setFooter({ text: 'rapldez OS • Konkursy' })
+                .setTimestamp(new Date(originalEmbed.timestamp || Date.now()));
+
+            await interaction.update({ embeds: [updatedEmbed] });
+            return interaction.followUp({ content: left ? '👋 Opuściłeś losowanie.' : '🎉 Zostałeś pomyślnie dodany do losowania! Powodzenia.', ephemeral: true });
         } catch (e) {
             console.error(e);
             return interaction.reply({ content: 'Błąd podczas zapisywania.', ephemeral: true });
         }
     }
 
-    // Obsługa przycisków kontrolnych panelu statusu
     if (interaction.customId === 'status_restart_bot' || interaction.customId === 'status_refresh') {
         if (interaction.user.id !== YOUR_DISCORD_ID) {
             return interaction.reply({ content: '❌ Odmowa dostępu. Ten przycisk jest zarezerwowany dla właściciela systemu.', ephemeral: true });
