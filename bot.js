@@ -15,8 +15,9 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 
 // Podpięcie osobnego panelu zarządzania i terminala z pliku panel.js
-const panelRouter = require('./panel')(client);
+const panelRouter = require('./panel');
 app.use('/', panelRouter);
+
 
 // --- SPRAWDZANIE ZMIENNYCH ŚRODOWISKOWYCH (.env) ---
 const requiredEnv = ['BOT_TOKEN', 'MONGO_URI', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI'];
