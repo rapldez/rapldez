@@ -398,4 +398,18 @@ document.addEventListener('DOMContentLoaded', () => {
     fetch('/api/views').then(res => res.json()).then(data => {
         if (data.views) document.getElementById('live-counter').innerText = data.views;
     }).catch(err => {});
+
+const titleText = "@rapldez";
+    let titleIndex = 0;
+    let direction = 1;
+    function animateTitle() {
+        document.title = titleText.substring(0, titleIndex) || "\u200B";
+        titleIndex += direction;
+        let delay = 250;
+        if (titleIndex === titleText.length + 1) { direction = -1; delay = 1500; titleIndex = titleText.length - 1; } 
+        else if (titleIndex === 0) { direction = 1; delay = 500; } 
+        else if (direction === -1) { delay = 100; }
+        setTimeout(animateTitle, delay);
+    }
+    animateTitle();
 });
