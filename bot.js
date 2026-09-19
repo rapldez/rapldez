@@ -190,7 +190,6 @@ app.post('/api/kontakt', async (req, res) => {
             permissionOverwrites.push({ id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
         }
 
-        // Generowanie nazwy zgłoszenie-X na podstawie liczby dokumentów w bazie + 1
         const ticketCount = await TicketArchive.countDocuments();
         const nextNumber = ticketCount + 1;
         const channelName = `zgłoszenie-${nextNumber}`;
@@ -528,7 +527,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId === 'open_ticket') {
         if (targetId && targetId !== 'brak_id') await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: true }).catch(() => null);
         
-        // Powrót do nazwy zgłoszenie-X po ponownym otwarciu
+        // Powrót do zgłoszenie-X po ponownym otwarciu
         const allChannels = interaction.guild.channels.cache;
         const ticketCount = allChannels.filter(c => c.name.startsWith('zgłoszenie-')).size + 1;
         await interaction.channel.setName(`zgłoszenie-${ticketCount}`).catch(() => null);
