@@ -265,7 +265,6 @@ app.post('/api/terminal', async (req, res) => {
     return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo]` });
 });
 
-// --- ZAKTUALIZOWANY ENDPOINT KREATORA ZAAWANSOWANYCH EMBEDÓW ---
 app.post('/api/send-embed', async (req, res) => {
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ error: 'Brak uprawnień roota.' });
     
@@ -522,8 +521,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    if (interaction.user.id !== YOUR_DISCORD_ID && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) return;
-
+    // Usunięcie restrykcyjnego blokowania administratorów/właściciela, żeby przyciski działały zawsze poprawnie w obie strony
     const topic = interaction.channel.topic || '';
     const parts = topic.split('|');
     let targetId = parts[0] || 'brak_id';
@@ -562,7 +560,6 @@ client.on('interactionCreate', async interaction => {
             await interaction.channel.setName(`zgłoszenie-${ticketNumber}`).catch(() => null);
         }, 1000);
 
-        // Poprawka: przywrócenie cyklicznego przycisku zamykania
         const closeRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
