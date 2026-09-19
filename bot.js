@@ -2,16 +2,21 @@ const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilde
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs'); 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-
 app.use(express.static(path.join(__dirname, 'public')));
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SERVER_ID = '1516145205215232050'; 
 const CATEGORY_ID = '1550704110691422318'; 
+const COUNTER_FILE = path.join(__dirname, 'licznik.txt');
+
+if (!fs.existsSync(COUNTER_FILE)) {
+    fs.writeFileSync(COUNTER_FILE, '0');
+}
 
 const client = new Client({ 
     intents: [
@@ -20,6 +25,17 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers
     ] 
+});
+
+app.get('/api/views', (req, res) => {
+    try {
+        let views = parseInt(fs.readFileSync(COUNTER_FILE, 'utf-8')) || 0;
+        views++;
+        fs.writeFileSync(COUNTER_FILE, views.toString());
+        res.json({ views });
+    } catch (err) {
+        res.status(500).json({ views: 'Live' });
+    }
 });
 
 app.post('/api/kontakt', async (req, res) => {
@@ -68,14 +84,18 @@ app.post('/api/kontakt', async (req, res) => {
         });
 
         const embed = new EmbedBuilder()
-            .setTitle(`Nowe zgłoszenie ze strony: ${subject}`)
-            .setColor('#23a559')
+            .setAuthor({ 
+                name: `Zgłoszenie od: ${nick}`, 
+                iconURL: member ? member.user.displayAvatarURL({ dynamic: true }) : 'https://cdn.discordapp.com/embed/avatars/0.png' 
+            })
+            .setTitle(subject)
+            .setColor('#2b2d31') 
+            .setDescription(`>>> ${message}`) 
             .addFields(
-                { name: 'Nick', value: nick, inline: true },
-                { name: 'Podane Discord ID', value: discordId || 'Brak', inline: true },
-                { name: 'Użytkownik na serwerze?', value: member ? `<@${member.id}>` : 'Nie znaleziono / Złe ID', inline: false },
-                { name: 'Treść zgłoszenia', value: message, inline: false }
+                { name: 'Discord ID', value: discordId ? `\`${discordId}\`` : 'Nie podano', inline: true },
+                { name: 'Status', value: member ? `✅ Na serwerze (<@${member.id}>)` : '❌ Brak na serwerze', inline: true }
             )
+            .setFooter({ text: 'rapldez OS • System zgłoszeń' })
             .setTimestamp();
 
         await newChannel.send({ embeds: [embed] });
