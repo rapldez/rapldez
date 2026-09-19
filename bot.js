@@ -490,6 +490,7 @@ client.on('roleDelete', r => sendServerLog('🗑️ Usunięcie roli', `Usunięto
 client.on('guildBanAdd', ban => sendServerLog('🔨 Zbanowanie członka', `Zbanowano \`${ban.user.tag}\`.`));
 client.on('guildBanRemove', ban => sendServerLog('🕊️ Odbanowanie członka', `Odbanowano \`${ban.user.tag}\`.`));
 
+// --- CYBERNETYCZNE CENTRUM DOWODZENIA (STATUS Z TELEMETRIĄ) ---
 client.once('ready', async () => {
     app.listen(PORT, () => { console.log(`Serwer działa na porcie ${PORT}!`); });
     try {
@@ -500,22 +501,35 @@ client.once('ready', async () => {
                 await statusChannel.bulkDelete(fetchedMessages, true).catch(() => {});
             }
 
-            const getStatusEmbed = () => new EmbedBuilder()
-                .setColor(MAIN_COLOR)
-                .setAuthor({ name: '🟢 RAPLDEZ OS • MONITOR SYSTEMU' })
-                .setDescription(
-                    `>>> **• 🤖 Stan Bota:** \`Online (Stabilny)\`\n` +
-                    `**• 🌐 Stan Strony:** \`Online (Render Cloud)\`\n` +
-                    `**• 🗄️ Stan Bazy Danych:** \`${dbStatus}\`\n` +
-                    `**• 📶 Aktualny Ping:** \`${client.ws.ping}ms\``
-                )
-                .setTimestamp()
-                .setFooter({ text: 'rapldez.onrender.com • Panel Automatycznego Statusu' });
+            const getStatusEmbed = () => {
+                const memoryUsage = process.memoryUsage().rss / 1024 / 1024;
+                const uptimeSeconds = process.uptime();
+                const hours = Math.floor(uptimeSeconds / 3600);
+                const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+                
+                const ramPercent = Math.min(Math.round((memoryUsage / 500) * 100), 100);
+                const filledBlocks = Math.round(ramPercent / 10);
+                const progressBar = '█'.repeat(filledBlocks) + '░'.repeat(10 - filledBlocks);
 
-            // Przyciski kontrolne statusu (zabezpieczone w interakcjach dla roota)
+                return new EmbedBuilder()
+                    .setColor(MAIN_COLOR)
+                    .setAuthor({ name: '🟢 RAPLDEZ OS • CYBERNETYCZNE CENTRUM DOWODZENIA' })
+                    .setDescription(
+                        `>>> **• 🤖 Stan Bota:** \`Online (Stabilny)\`\n` +
+                        `**• 🌐 Stan Strony:** \`Online (Render Cloud)\`\n` +
+                        `**• 🗄️ Stan Bazy Danych:** \`${dbStatus}\`\n` +
+                        `**• 📶 Aktualny Ping:** \`${client.ws.ping}ms\`\n` +
+                        `**• ⏳ Uptime Systemu:** \`${hours}h ${minutes}m\`\n\n` +
+                        `**📊 Zużycie RAM (${memoryUsage.toFixed(1)} MB / 500 MB):**\n` +
+                        `\`${progressBar}\` \`${ramPercent}%\``
+                    )
+                    .setTimestamp()
+                    .setFooter({ text: 'rapldez.onrender.com • Live Telemetry' });
+            };
+
             const statusRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('status_restart_bot').setLabel('Restart Bota').setStyle(ButtonStyle.Danger).setEmoji('🔄'),
-                new ButtonBuilder().setCustomId('status_refresh').setLabel('Odśwież Status').setStyle(ButtonStyle.Secondary).setEmoji('📊')
+                new ButtonBuilder().setCustomId('status_refresh').setLabel('Odśwież Telemetrię').setStyle(ButtonStyle.Secondary).setEmoji('📊')
             );
 
             const statusMsg = await statusChannel.send({ embeds: [getStatusEmbed()], components: [statusRow] });
@@ -524,7 +538,7 @@ client.once('ready', async () => {
                 try {
                     await statusMsg.edit({ embeds: [getStatusEmbed()], components: [statusRow] });
                 } catch (e) {}
-            }, 5 * 60 * 1000);
+            }, 60 * 1000);
         }
     } catch (e) {
         console.error('Błąd monitora statusu:', e);
@@ -544,21 +558,32 @@ client.on('interactionCreate', async interaction => {
             logToTerminalDiscord('🔄 Zdalny Restart', `Zainicjowany przez <@${interaction.user.id}> poprzez panel statusu.`);
             setTimeout(() => process.exit(1), 1000);
         } else if (interaction.customId === 'status_refresh') {
+            const memoryUsage = process.memoryUsage().rss / 1024 / 1024;
+            const uptimeSeconds = process.uptime();
+            const hours = Math.floor(uptimeSeconds / 3600);
+            const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+            const ramPercent = Math.min(Math.round((memoryUsage / 500) * 100), 100);
+            const filledBlocks = Math.round(ramPercent / 10);
+            const progressBar = '█'.repeat(filledBlocks) + '░'.repeat(10 - filledBlocks);
+
             const getStatusEmbed = () => new EmbedBuilder()
                 .setColor(MAIN_COLOR)
-                .setAuthor({ name: '🟢 RAPLDEZ OS • MONITOR SYSTEMU' })
+                .setAuthor({ name: '🟢 RAPLDEZ OS • CYBERNETYCZNE CENTRUM DOWODZENIA' })
                 .setDescription(
                     `>>> **• 🤖 Stan Bota:** \`Online (Stabilny)\`\n` +
                     `**• 🌐 Stan Strony:** \`Online (Render Cloud)\`\n` +
                     `**• 🗄️ Stan Bazy Danych:** \`${dbStatus}\`\n` +
-                    `**• 📶 Aktualny Ping:** \`${client.ws.ping}ms\``
+                    `**• 📶 Aktualny Ping:** \`${client.ws.ping}ms\`\n` +
+                    `**• ⏳ Uptime Systemu:** \`${hours}h ${minutes}m\`\n\n` +
+                    `**📊 Zużycie RAM (${memoryUsage.toFixed(1)} MB / 500 MB):**\n` +
+                    `\`${progressBar}\` \`${ramPercent}%\``
                 )
                 .setTimestamp()
-                .setFooter({ text: 'rapldez.onrender.com • Panel Automatycznego Statusu' });
+                .setFooter({ text: 'rapldez.onrender.com • Live Telemetry' });
 
             const statusRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('status_restart_bot').setLabel('Restart Bota').setStyle(ButtonStyle.Danger).setEmoji('🔄'),
-                new ButtonBuilder().setCustomId('status_refresh').setLabel('Odśwież Status').setStyle(ButtonStyle.Secondary).setEmoji('📊')
+                new ButtonBuilder().setCustomId('status_refresh').setLabel('Odśwież Telemetrię').setStyle(ButtonStyle.Secondary).setEmoji('📊')
             );
 
             await interaction.update({ embeds: [getStatusEmbed()], components: [statusRow] });
