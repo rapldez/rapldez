@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const session = require('express-session');
 const fetch = require('node-fetch');
 const app = express();
+app.use('/', panelRouter);
 const panelRouter = require('./panel');
 
 
