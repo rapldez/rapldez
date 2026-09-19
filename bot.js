@@ -6,6 +6,8 @@ const mongoose = require('mongoose');
 const session = require('express-session');
 const fetch = require('node-fetch');
 const app = express();
+const panelRouter = require('./panel');
+
 
 // --- SPRAWDZANIE ZMIENNYCH ŚRODOWISKOWYCH (.env) ---
 const requiredEnv = ['BOT_TOKEN', 'MONGO_URI', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI'];
