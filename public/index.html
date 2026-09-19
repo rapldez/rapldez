@@ -21,7 +21,7 @@
         #contact-overlay, #embed-builder-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0,0,0,0.75);
             backdrop-filter: blur(5px);
             display: flex;
             justify-content: center;
@@ -36,23 +36,31 @@
             border: 1px solid rgba(255,255,255,0.08);
             padding: 20px;
             border-radius: 12px;
-            width: 95%;
-            max-width: 520px;
-            max-height: 90vh;
+            width: 96%;
+            max-width: 900px;
+            max-height: 92vh;
             overflow-y: auto;
             box-shadow: 0 10px 30px rgba(0,0,0,0.8);
             z-index: 9999;
             color: #dbdee1;
             font-family: inherit;
         }
-        /* Style dla zaawansowanego kreatora embedów */
+        .builder-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        @media(max-width: 768px) { .builder-grid { grid-template-columns: 1fr; } }
+        
         .builder-section { background: #1e1f22; border: 1px solid #2b2d31; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
         .builder-section-header { padding: 10px 14px; background: #2b2d31; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 13px; color: #fff; }
         .builder-section-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
         .builder-input { background: #111214; border: 1px solid #383a40; padding: 8px 10px; color: #fff; border-radius: 6px; outline: none; font-size: 13px; width: 100%; box-sizing: border-box; }
         .builder-input:focus { border-color: #5865F2; }
         .builder-label { font-size: 11px; color: #949ba4; font-weight: 600; text-transform: uppercase; margin-top: 4px; }
-        .color-picker-wrapper { display: flex; gap: 8px; align-items: center; }
+        
+        /* Symulator podglądu discorda na żywo */
+        .discord-preview-box { background: #313338; border-radius: 8px; padding: 14px; font-family: 'gg sans', sans-serif; font-size: 14px; color: #dbdee1; position: relative; }
+        .discord-embed-card { background: #2b2d31; border-radius: 4px; border-left: 4px solid #024442; padding: 12px; display: flex; gap: 12px; margin-top: 6px; word-break: break-word; }
+        .discord-embed-content { flex-grow: 1; display: flex; flex-direction: column; gap: 6px; }
+        .discord-btn-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+        .discord-sim-btn { background: #4e5058; color: #fff; border: none; padding: 6px 14px; border-radius: 4px; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
     </style>
 </head>
 <body>
@@ -92,110 +100,155 @@
 
     <!-- FORMULARZ KONTAKTOWY -->
     <div id="contact-overlay">
-        <div class="contact-window">
+        <div class="contact-window" style="max-width: 400px;">
             <div class="contact-header" style="display:flex; justify-content:space-between; margin-bottom:15px; color:#fff; font-weight:bold;">
                 <span>Formularz Kontaktowy</span>
                 <i class="fa-solid fa-xmark" id="close-contact" style="cursor:pointer;"></i>
             </div>
             <div class="contact-body" style="display:flex; flex-direction:column; gap:10px;">
-                <input type="text" id="contact-nick" placeholder="Podaj swój nick / ID" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none;" required>
-                <input type="text" id="contact-subject" placeholder="Temat kontaktu" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none;" required>
-                <textarea id="contact-message" placeholder="Treść wiadomości..." rows="4" style="background:#1e1f22; border:1px solid #383a40; padding:10px; color:#fff; border-radius:6px; outline:none; resize:none;" required></textarea>
+                <input type="text" id="contact-nick" placeholder="Podaj swój nick / ID" class="builder-input" required>
+                <input type="text" id="contact-subject" placeholder="Temat kontaktu" class="builder-input" required>
+                <textarea id="contact-message" placeholder="Treść wiadomości..." rows="4" class="builder-input" style="resize:none;" required></textarea>
                 <button id="send-contact-btn" style="background:#5865F2; color:#fff; border:none; padding:10px; border-radius:6px; font-weight:bold; cursor:pointer;">Wyślij zgłoszenie</button>
                 <div class="contact-disclaimer" style="font-size:11px; color:#949ba4; text-align:center;">Wiadomość trafia bezpośrednio na mój serwer Discord.</div>
             </div>
         </div>
     </div>
 
-    <!-- ZAAWANSOWANY KREATOR EMBEDÓW -->
+    <!-- ZAAWANSOWANY KREATOR EMBEDÓW Z PRZYCISKAMI I PODGLĄDEM -->
     <div id="embed-builder-overlay">
         <div class="contact-window">
             <div class="contact-header" style="display:flex; justify-content:space-between; margin-bottom:15px; color:#fff; font-weight:bold; align-items:center;">
-                <span><i class="fa-solid fa-wand-magic-sparkles" style="color: #024442;"></i> Zaawansowany Kreator Embedów</span>
-                <i class="fa-solid fa-xmark" onclick="closeEmbedBuilder()" style="cursor:pointer; font-size: 16px;"></i>
+                <span><i class="fa-solid fa-wand-magic-sparkles" style="color: #024442;"></i> Zaawansowany Kreator Embedów & Przycisków</span>
+                <i class="fa-solid fa-xmark" onclick="closeEmbedBuilder()" style="cursor:pointer; font-size: 18px;"></i>
             </div>
-            <div class="contact-body" style="display:flex; flex-direction:column; gap:10px;">
-                
-                <!-- Główne ustawienia -->
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <span class="builder-label">ID Kanału Docelowego (Wymagane)</span>
-                    <input type="text" id="embed-channel" class="builder-input" placeholder="np. 1550753070726512730" required>
-                </div>
 
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <span class="builder-label">Treść Wiadomości / Tekst nad embedem (Opcjonalnie)</span>
-                    <textarea id="embed-content" class="builder-input" placeholder="Zwykły tekst wyświetlany nad embedem..." rows="2" style="resize:none;"></textarea>
-                </div>
+            <div class="builder-grid">
+                <!-- LEWA STRONA: FORMULARZ -->
+                <div style="display:flex; flex-direction:column; gap:8px; max-height: 75vh; overflow-y: auto; padding-right: 5px;">
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span class="builder-label">ID Kanału Docelowego (Wymagane)</span>
+                        <input type="text" id="embed-channel" class="builder-input" placeholder="np. 1550753070726512730" required>
+                    </div>
 
-                <!-- Sekcja Autora -->
-                <div class="builder-section">
-                    <div class="builder-section-header" onclick="toggleBuilderSection(this)">
-                        <span><i class="fa-solid fa-user"></i> Autor</span>
-                        <i class="fa-solid fa-chevron-down"></i>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span class="builder-label">Treść Wiadomości / Tekst nad embedem</span>
+                        <textarea id="embed-content" class="builder-input" placeholder="Zwykły tekst..." rows="2" style="resize:none;" oninput="updatePreview()"></textarea>
                     </div>
-                    <div class="builder-section-body" style="display:none;">
-                        <span class="builder-label">Nazwa Autora</span>
-                        <input type="text" id="embed-author-name" class="builder-input" placeholder="Nazwa wyświetlana u góry">
-                        <span class="builder-label">Link URL Autora</span>
-                        <input type="text" id="embed-author-url" class="builder-input" placeholder="https://...">
-                        <span class="builder-label">Ikona Autora (URL)</span>
-                        <input type="text" id="embed-author-icon" class="builder-input" placeholder="https://...">
-                    </div>
-                </div>
 
-                <!-- Sekcja Treści (Body) -->
-                <div class="builder-section">
-                    <div class="builder-section-header" onclick="toggleBuilderSection(this)">
-                        <span><i class="fa-solid fa-align-left"></i> Treść Embedu (Body)</span>
-                        <i class="fa-solid fa-chevron-down"></i>
+                    <!-- Autora -->
+                    <div class="builder-section">
+                        <div class="builder-section-header" onclick="toggleBuilderSection(this)">
+                            <span><i class="fa-solid fa-user"></i> Autor</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </div>
+                        <div class="builder-section-body" style="display:none;">
+                            <span class="builder-label">Nazwa Autora</span>
+                            <input type="text" id="embed-author-name" class="builder-input" placeholder="Nazwa" oninput="updatePreview()">
+                            <span class="builder-label">Link URL Autora</span>
+                            <input type="text" id="embed-author-url" class="builder-input" placeholder="https://...">
+                            <span class="builder-label">Ikona Autora (URL)</span>
+                            <input type="text" id="embed-author-icon" class="builder-input" placeholder="https://..." oninput="updatePreview()">
+                        </div>
                     </div>
-                    <div class="builder-section-body">
-                        <span class="builder-label">Tytuł</span>
-                        <input type="text" id="embed-title" class="builder-input" placeholder="Główny tytuł embedu">
-                        <span class="builder-label">Opis (Możesz używać \n)</span>
-                        <textarea id="embed-desc" class="builder-input" placeholder="Treść główna embedu..." rows="4" style="resize:none;"></textarea>
-                        <span class="builder-label">Kolor Bocznego Paska</span>
-                        <div class="color-picker-wrapper">
-                            <input type="color" id="embed-color-picker" value="#024442" style="background:none; border:none; width:35px; height:32px; cursor:pointer;" oninput="document.getElementById('embed-color-text').value=this.value">
-                            <input type="text" id="embed-color-text" class="builder-input" value="#024442" oninput="document.getElementById('embed-color-picker').value=this.value">
+
+                    <!-- Body -->
+                    <div class="builder-section">
+                        <div class="builder-section-header" onclick="toggleBuilderSection(this)">
+                            <span><i class="fa-solid fa-align-left"></i> Treść Embedu (Body)</span>
+                            <i class="fa-solid fa-chevron-up"></i>
+                        </div>
+                        <div class="builder-section-body">
+                            <span class="builder-label">Tytuł</span>
+                            <input type="text" id="embed-title" class="builder-input" placeholder="Tytuł embedu" oninput="updatePreview()">
+                            <span class="builder-label">Opis (Używaj \n)</span>
+                            <textarea id="embed-desc" class="builder-input" placeholder="Opis..." rows="3" style="resize:none;" oninput="updatePreview()"></textarea>
+                            <span class="builder-label">Kolor Paska</span>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="color" id="embed-color-picker" value="#024442" style="background:none; border:none; width:35px; height:32px; cursor:pointer;" oninput="document.getElementById('embed-color-text').value=this.value; updatePreview()">
+                                <input type="text" id="embed-color-text" class="builder-input" value="#024442" oninput="document.getElementById('embed-color-picker').value=this.value; updatePreview()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Obrazki -->
+                    <div class="builder-section">
+                        <div class="builder-section-header" onclick="toggleBuilderSection(this)">
+                            <span><i class="fa-solid fa-image"></i> Obrazki</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </div>
+                        <div class="builder-section-body" style="display:none;">
+                            <span class="builder-label">Duży Obrazek (Image URL)</span>
+                            <input type="text" id="embed-image" class="builder-input" placeholder="https://..." oninput="updatePreview()">
+                            <span class="builder-label">Miniaturka (Thumbnail URL)</span>
+                            <input type="text" id="embed-thumbnail" class="builder-input" placeholder="https://..." oninput="updatePreview()">
+                        </div>
+                    </div>
+
+                    <!-- Stopka -->
+                    <div class="builder-section">
+                        <div class="builder-section-header" onclick="toggleBuilderSection(this)">
+                            <span><i class="fa-solid fa-shoe-prints"></i> Stopka</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </div>
+                        <div class="builder-section-body" style="display:none;">
+                            <span class="builder-label">Tekst Stopki</span>
+                            <input type="text" id="embed-footer" class="builder-input" placeholder="Tekst na dole" oninput="updatePreview()">
+                            <span class="builder-label">Ikona Stopki (URL)</span>
+                            <input type="text" id="embed-footer-icon" class="builder-input" placeholder="https://...">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                                <input type="checkbox" id="embed-timestamp" style="cursor: pointer;" checked onchange="updatePreview()">
+                                <label for="embed-timestamp" style="font-size: 12px; cursor: pointer;">Timestamp (Data)</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Przyciski (Komponenty) -->
+                    <div class="builder-section">
+                        <div class="builder-section-header" onclick="toggleBuilderSection(this)">
+                            <span><i class="fa-solid fa-square-poll-horizontal"></i> Przyciski (Komponenty)</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </div>
+                        <div class="builder-section-body" style="display:none;">
+                            <div id="buttons-container" style="display: flex; flex-direction: column; gap: 6px;"></div>
+                            <button onclick="addButtonField()" style="background:#2b2d31; color:#fff; border:1px dashed #383a40; padding:6px; border-radius:4px; font-size:12px; cursor:pointer; margin-top:4px;"><i class="fa-solid fa-plus"></i> Dodaj przycisk</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Sekcja Obrazków -->
-                <div class="builder-section">
-                    <div class="builder-section-header" onclick="toggleBuilderSection(this)">
-                        <span><i class="fa-solid fa-image"></i> Obrazki i Miniaturka</span>
-                        <i class="fa-solid fa-chevron-down"></i>
-                    </div>
-                    <div class="builder-section-body" style="display:none;">
-                        <span class="builder-label">Duży Obrazek (Image URL)</span>
-                        <input type="text" id="embed-image" class="builder-input" placeholder="https://...">
-                        <span class="builder-label">Miniaturka w rogu (Thumbnail URL)</span>
-                        <input type="text" id="embed-thumbnail" class="builder-input" placeholder="https://...">
-                    </div>
-                </div>
-
-                <!-- Sekcja Stopki -->
-                <div class="builder-section">
-                    <div class="builder-section-header" onclick="toggleBuilderSection(this)">
-                        <span><i class="fa-solid fa-shoe-prints"></i> Stopka i Data</span>
-                        <i class="fa-solid fa-chevron-down"></i>
-                    </div>
-                    <div class="builder-section-body" style="display:none;">
-                        <span class="builder-label">Tekst Stopki</span>
-                        <input type="text" id="embed-footer" class="builder-input" placeholder="Tekst na samym dole">
-                        <span class="builder-label">Ikona Stopki (URL)</span>
-                        <input type="text" id="embed-footer-icon" class="builder-input" placeholder="https://...">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
-                            <input type="checkbox" id="embed-timestamp" style="cursor: pointer;" checked>
-                            <label for="embed-timestamp" style="font-size: 12px; cursor: pointer;">Dodaj aktualną datę i godzinę (Timestamp)</label>
+                <!-- PRAWA STRONA: PODGLĄD NA ŻYWO (LIVE MOCKUP) -->
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <span class="builder-label" style="color: #fff;"><i class="fa-solid fa-eye"></i> Podgląd na żywo (Discord Mockup)</span>
+                    <div class="discord-preview-box">
+                        <div style="display: flex; gap: 10px; align-items: flex-start;">
+                            <div style="background: #5865F2; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; flex-shrink: 0;">R</div>
+                            <div style="display: flex; flex-direction: column; width: 100%;">
+                                <div style="display: flex; gap: 8px; align-items: baseline;">
+                                    <span style="font-weight: 600; color: #fff;">rapldez bot</span>
+                                    <span style="background: #5865F2; color: #fff; font-size: 10px; padding: 1px 4px; border-radius: 3px; font-weight: 600;">BOT</span>
+                                    <span style="font-size: 11px; color: #949ba4;" id="preview-time">Dziś o 15:30</span>
+                                </div>
+                                <div id="preview-content-text" style="margin-top: 4px; white-space: pre-wrap; font-size: 13px;"></div>
+                                
+                                <!-- Karta Embedu -->
+                                <div class="discord-embed-card" id="preview-embed-card">
+                                    <div class="discord-embed-content">
+                                        <div id="preview-author" style="font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;"></div>
+                                        <div id="preview-title" style="font-size: 16px; font-weight: 600; color: #fff;"></div>
+                                        <div id="preview-desc" style="font-size: 13px; white-space: pre-wrap; color: #dbdee1;"></div>
+                                        <div id="preview-image-wrap"></div>
+                                        <div id="preview-footer" style="font-size: 11px; color: #949ba4; display: flex; align-items: center; gap: 6px; margin-top: 4px;"></div>
+                                    </div>
+                                    <div id="preview-thumb-wrap"></div>
+                                </div>
+                                <div class="discord-btn-row" id="preview-buttons-row"></div>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <button id="send-builder-btn" onclick="sendEmbed()" style="background:#024442; color:#fff; border:none; padding:12px; border-radius:6px; font-weight:bold; cursor:pointer; transition: 0.2s; margin-top:5px;"><i class="fa-solid fa-paper-plane"></i> Wyślij Embed na Serwer</button>
-                <div id="embed-status" style="font-size:12px; color:#23a559; text-align:center; height:18px;"></div>
+                    <button id="send-builder-btn" onclick="sendEmbed()" style="background:#024442; color:#fff; border:none; padding:12px; border-radius:6px; font-weight:bold; cursor:pointer; transition: 0.2s; margin-top:auto;"><i class="fa-solid fa-paper-plane"></i> Wyślij Embed na Serwer</button>
+                    <div id="embed-status" style="font-size:12px; color:#23a559; text-align:center; height:18px;"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -300,11 +353,12 @@
 
     <div id="toast-container" class="toast-container"></div>
 
-    <!-- SKRYPTY OBSŁUGUJĄCE ZAAWANSOWANY KREATOR -->
+    <!-- SKRYPTY OBSŁUGUJĄCE KREATOR Z PRZYCISKAMI I PODGLĄDEM -->
     <script>
         function openEmbedBuilder() {
             document.getElementById('embed-builder-overlay').style.opacity = '1';
             document.getElementById('embed-builder-overlay').style.pointerEvents = 'auto';
+            updatePreview();
         }
 
         function closeEmbedBuilder() {
@@ -324,6 +378,87 @@
             }
         }
 
+        function addButtonField() {
+            const container = document.getElementById('buttons-container');
+            const div = document.createElement('div');
+            div.className = 'button-row-item';
+            div.style.cssText = 'display:flex; gap:6px; align-items:center; background:#111214; padding:6px; border-radius:6px; border:1px solid #383a40;';
+            div.innerHTML = `
+                <input type="text" placeholder="Tekst przycisku" class="builder-input btn-label" style="flex:1;" oninput="updatePreview()">
+                <select class="builder-input btn-style" style="width:90px;" oninput="updatePreview()">
+                    <option value="PRIMARY">Blurple</option>
+                    <option value="SECONDARY">Gray</option>
+                    <option value="SUCCESS">Green</option>
+                    <option value="DANGER">Red</option>
+                    <option value="LINK">Link</option>
+                </select>
+                <input type="text" placeholder="Custom ID / URL" class="builder-input btn-value" style="flex:1;">
+                <i class="fa-solid fa-trash" style="color:#f23f42; cursor:pointer; padding:4px;" onclick="this.parentElement.remove(); updatePreview();"></i>
+            `;
+            container.appendChild(div);
+            updatePreview();
+        }
+
+        function updatePreview() {
+            const content = document.getElementById('embed-content').value;
+            const author = document.getElementById('embed-author-name').value;
+            const authorIcon = document.getElementById('embed-author-icon').value;
+            const title = document.getElementById('embed-title').value;
+            const desc = document.getElementById('embed-desc').value;
+            const color = document.getElementById('embed-color-text').value || '#024442';
+            const image = document.getElementById('embed-image').value;
+            const thumb = document.getElementById('embed-thumbnail').value;
+            const footer = document.getElementById('embed-footer').value;
+            const timestamp = document.getElementById('embed-timestamp').checked;
+
+            document.getElementById('preview-content-text').innerText = content;
+            document.getElementById('preview-embed-card').style.borderLeftColor = color;
+            
+            const authEl = document.getElementById('preview-author');
+            if (author) {
+                authEl.style.display = 'flex';
+                authEl.innerHTML = (authorIcon ? `<img src="${authorIcon}" style="width:20px; height:20px; border-radius:50%;">` : '') + `<span>${author}</span>`;
+            } else { authEl.style.display = 'none'; }
+
+            document.getElementById('preview-title').innerText = title;
+            document.getElementById('preview-title').style.display = title ? 'block' : 'none';
+            document.getElementById('preview-desc').innerText = desc;
+            document.getElementById('preview-desc').style.display = desc ? 'block' : 'none';
+
+            const imgWrap = document.getElementById('preview-image-wrap');
+            if (image) { imgWrap.innerHTML = `<img src="${image}" style="max-width:100%; border-radius:4px; margin-top:6px;">`; imgWrap.style.display = 'block'; }
+            else { imgWrap.style.display = 'none'; }
+
+            const thumbWrap = document.getElementById('preview-thumb-wrap');
+            if (thumb) { thumbWrap.innerHTML = `<img src="${thumb}" style="width:80px; height:80px; border-radius:4px; object-fit:cover;">`; thumbWrap.style.display = 'block'; }
+            else { thumbWrap.style.display = 'none'; }
+
+            const footerEl = document.getElementById('preview-footer');
+            if (footer || timestamp) {
+                footerEl.style.display = 'flex';
+                let timeStr = timestamp ? 'Dziś o 15:30' : '';
+                footerEl.innerText = footer + (footer && timeStr ? ' • ' : '') + timeStr;
+            } else { footerEl.style.display = 'none'; }
+
+            const btnRow = document.getElementById('preview-buttons-row');
+            btnRow.innerHTML = '';
+            document.querySelectorAll('.button-row-item').forEach(row => {
+                const label = row.querySelector('.btn-label').value || 'Przycisk';
+                const style = row.querySelector('.btn-style').value;
+                let bg = '#5865F2';
+                if(style === 'SECONDARY') bg = '#4e5058';
+                if(style === 'SUCCESS') bg = '#248046';
+                if(style === 'DANGER') bg = '#da373c';
+                if(style === 'LINK') bg = '#4e5058';
+                
+                const btn = document.createElement('button');
+                btn.className = 'discord-sim-btn';
+                btn.style.backgroundColor = bg;
+                btn.innerHTML = `<span>${label}</span>` + (style === 'LINK' ? '<i class="fa-solid fa-arrow-up-right-from-square" style="font-size:10px;"></i>' : '');
+                btnRow.appendChild(btn);
+            });
+        }
+
         async function sendEmbed() {
             const channelId = document.getElementById('embed-channel').value.trim();
             const content = document.getElementById('embed-content').value.trim();
@@ -338,13 +473,18 @@
             const footer = document.getElementById('embed-footer').value.trim();
             const footerIcon = document.getElementById('embed-footer-icon').value.trim();
             const timestamp = document.getElementById('embed-timestamp').checked;
+
+            const buttons = [];
+            document.querySelectorAll('.button-row-item').forEach(row => {
+                buttons.push({
+                    label: row.querySelector('.btn-label').value.trim(),
+                    style: row.querySelector('.btn-style').value,
+                    value: row.querySelector('.btn-value').value.trim()
+                });
+            });
+
             const status = document.getElementById('embed-status');
-            
-            if (!channelId || (!desc && !title && !content)) {
-                status.style.color = '#f23f42';
-                status.innerText = 'Podaj ID kanału oraz treść lub tytuł embedu!';
-                return;
-            }
+            if (!channelId) { status.style.color = '#f23f42'; status.innerText = 'Podaj ID kanału!'; return; }
 
             status.innerText = 'Wysyłanie...';
             status.style.color = '#23a559';
@@ -356,37 +496,25 @@
                     body: JSON.stringify({
                         channelId, content, authorName, authorUrl, authorIcon,
                         title, description: desc, color, image, thumbnail,
-                        footer, footerIcon, timestamp
+                        footer, footerIcon, timestamp, buttons
                     })
                 });
                 const data = await res.json();
                 if (data.success) {
                     status.innerText = '✅ Wysłano na serwer!';
-                    setTimeout(() => {
-                        closeEmbedBuilder();
-                        status.innerText = '';
-                    }, 1500);
-                } else {
-                    status.style.color = '#f23f42';
-                    status.innerText = data.error || 'Wystąpił błąd.';
-                }
-            } catch (e) {
-                status.style.color = '#f23f42';
-                status.innerText = 'Błąd z backendem.';
-            }
+                    setTimeout(() => { closeEmbedBuilder(); status.innerText = ''; }, 1500);
+                } else { status.style.color = '#f23f42'; status.innerText = data.error || 'Błąd.'; }
+            } catch (e) { status.style.color = '#f23f42'; status.innerText = 'Błąd z backendem.'; }
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
             try {
                 const res = await fetch('/api/check-auth');
                 const data = await res.json();
-                if (data.authenticated) {
-                    document.getElementById('open-embed-btn').style.display = 'inline-flex';
-                }
+                if (data.authenticated) { document.getElementById('open-embed-btn').style.display = 'inline-flex'; }
             } catch (e) {}
         });
     </script>
-
     <script src="script.js"></script>
 </body>
 </html>
