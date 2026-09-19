@@ -40,7 +40,6 @@ const MAIN_COLOR = '#024442';
 // --- FUNKCJE POMOCNICZE ---
 const createLogEmbed = (title, desc) => new EmbedBuilder().setColor(MAIN_COLOR).setAuthor({ name: title }).setDescription(desc).setTimestamp();
 
-// Formatowanie daty: najpierw godzina, potem data
 const formatDatePL = (dateObj = new Date()) => {
     const time = dateObj.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Warsaw' });
     const date = dateObj.toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw' });
@@ -103,7 +102,6 @@ const client = new Client({
     ] 
 });
 
-// --- CRASH MONITOR ---
 const sendCrashLog = async (error) => {
     const channel = client.channels.cache.get(LOG_CHANNEL_ID);
     if (!channel) return;
@@ -115,7 +113,6 @@ const sendCrashLog = async (error) => {
 process.on('uncaughtException', async (err) => { console.error(err); await sendCrashLog(err); });
 process.on('unhandledRejection', async (reason) => { console.error(reason); await sendCrashLog(reason); });
 
-// --- OAUTH2 DISCORD LOGIN ---
 app.get('/auth/discord', (req, res) => res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`));
 
 app.get('/auth/discord/callback', async (req, res) => {
@@ -154,7 +151,6 @@ app.get('/auth/discord/callback', async (req, res) => {
 app.get('/api/check-auth', (req, res) => res.json({ authenticated: (req.session?.user?.id === YOUR_DISCORD_ID), username: req.session?.user?.username }));
 app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({ success: true })));
 
-// --- API STRONY WWW ---
 app.get('/api/views', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     try {
@@ -169,15 +165,12 @@ app.get('/api/views', async (req, res) => {
     }
 });
 
-// Pamięć podręczna do blokowania podwójnych strzałów z formularza
 const recentSubmissions = new Map();
 
-// FORMULARZ KONTAKTOWY (ZABEZPIECZONY PRZED DUPLIKATAMI)
 app.post('/api/kontakt', async (req, res) => {
     const { nick, subject, message } = req.body;
     if (!nick || !message || !subject) return res.status(400).json({ error: 'Brakujące dane' });
 
-    // Blokada powtórzeń w ciągu 5 sekund dla tego samego nicku i treści
     const subKey = `${nick}_${message}`;
     if (recentSubmissions.has(subKey) && Date.now() - recentSubmissions.get(subKey) < 5000) {
         return res.status(200).json({ message: 'Zgłoszenie zostało już wysłane.' });
@@ -304,7 +297,6 @@ app.get('/p/:id', async (req, res) => {
     res.send(paste.content);
 });
 
-// --- KOMENDY DISCORD ---
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
@@ -405,9 +397,6 @@ client.on('messageCreate', async message => {
     }
 });
 
-// ==========================================
-// PEŁNY SYSTEM LOGÓW
-// ==========================================
 client.on('messageDelete', message => {
     if (message.author?.bot) return;
     sendServerLog('🗑️ Usunięcie wiadomości', `**Autor:** <@${message.author?.id}>\n**Kanał:** <#${message.channel.id}>\n**Treść:**\n\`\`\`text\n${message.content || '[Brak tekstu / Plik]'}\n\`\`\``);
@@ -446,7 +435,6 @@ client.on('roleDelete', r => sendServerLog('🗑️ Usunięcie roli', `Usunięto
 client.on('guildBanAdd', ban => sendServerLog('🔨 Zbanowanie członka', `Zbanowano \`${ban.user.tag}\`.`));
 client.on('guildBanRemove', ban => sendServerLog('🕊️ Odbanowanie członka', `Odbanowano \`${ban.user.tag}\`.`));
 
-// --- SYSTEM MONITORU INFRASTRUKTURY ---
 client.once('ready', async () => {
     app.listen(PORT, () => { console.log(`Serwer działa na porcie ${PORT}!`); });
     try {
@@ -517,26 +505,27 @@ client.on('interactionCreate', async interaction => {
     let createdAtStr = parts[1] || formatDatePL(new Date());
 
     if (interaction.customId === 'close_ticket') {
+        await interaction.deferUpdate();
         const closedAtStr = formatDatePL(new Date());
         await interaction.channel.setTopic(`${targetId}|${createdAtStr}|${closedAtStr}`).catch(() => null);
+        
         if (targetId && targetId !== 'brak_id') {
             await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
         }
 
-        const allChannels = interaction.guild.channels.cache;
-        const resolvedCount = allChannels.filter(c => c.name.startsWith('rozwiązany-')).size + 1;
-        await interaction.channel.setName(`rozwiązany-${resolvedCount}`).catch(() => null);
+        const ticketNumber = interaction.channel.name.replace(/[^0-9]/g, '') || '1';
+        await interaction.channel.setName(`rozwiązany-${ticketNumber}`).catch(() => null);
 
         const reopenRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
         );
         
-        await interaction.reply({ content: `🔒 Zgłoszenie zamknięte i oznaczone jako rozwiązane (${closedAtStr}).`, ephemeral: false }).catch(() => null);
-        await interaction.message.edit({ components: [reopenRow] }).catch(() => null);
+        await interaction.message.edit({ content: `🔒 Zgłoszenie zamknięte i oznaczone jako rozwiązane (${closedAtStr}).`, components: [reopenRow] }).catch(() => null);
     }
 
     if (interaction.customId === 'open_ticket') {
+        await interaction.deferUpdate();
         if (targetId && targetId !== 'brak_id') {
             await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true }).catch(() => null);
         }
@@ -549,8 +538,7 @@ client.on('interactionCreate', async interaction => {
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
         );
         
-        await interaction.reply({ content: `🔓 Zgłoszenie zostało ponownie otwarte.`, ephemeral: false }).catch(() => null);
-        await interaction.message.edit({ components: [closeRow] }).catch(() => null);
+        await interaction.message.edit({ content: `🔓 Zgłoszenie zostało ponownie otwarte.`, components: [closeRow] }).catch(() => null);
     }
 
     if (interaction.customId === 'archive_ticket') {
