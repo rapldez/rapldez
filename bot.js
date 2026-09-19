@@ -1472,7 +1472,7 @@ client.on('messageDelete', async message => {
     };
 
     // Tutaj wpisz ID swojego kanału logów (możesz też użyć zmiennej środowiskowej, np. process.env.LOG_CHANNEL_ID)
-    const LOG_CHANNEL_ID = ''; 
+    const LOG_CHANNEL_ID = '1550913229893410817'; 
     const logChannel = message.guild.channels.cache.get(LOG_CHANNEL_ID);
 
     if (logChannel) {
