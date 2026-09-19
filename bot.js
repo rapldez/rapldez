@@ -8,13 +8,13 @@ const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilde
 
 const app = express();
 
-// --- START SERWERA WWW DLA RENDERA ---
+// --- START SERWERA DLA RENDERA ---
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Serwer działa na porcie ${PORT}!`);
 });
 
-// --- PRZECHWYTYWANIE LOGÓW DO TERMINALA W PANELU ---
+// --- PRZECHWYTYWANIE LOGÓW DO PANELU ---
 let liveLogs = [];
 const originalConsoleLog = console.log;
 console.log = function(...args) {
@@ -29,11 +29,8 @@ const requiredEnv = ['BOT_TOKEN', 'MONGO_URI', 'DISCORD_CLIENT_ID', 'DISCORD_CLI
 const missingEnv = requiredEnv.filter(envName => !process.env[envName]);
 
 if (missingEnv.length > 0) {
-    console.error('============================================================');
-    console.error('❌ BŁĄD KRYTYCZNY: Brakuje następujących zmiennych środowiskowych:');
+    console.error('❌ BŁĄD KRYTYCZNY: Brakuje zmiennych środowiskowych:');
     missingEnv.forEach(env => console.error(`   - ${env}`));
-    console.error('Uzupełnij je w pliku .env lub w panelu Render przed startem bota!');
-    console.error('============================================================');
     process.exit(1);
 }
 
@@ -41,7 +38,6 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
-
 app.use(session({
     secret: 'rapldez_super_secret_key_997',
     resave: false,
@@ -65,10 +61,9 @@ const LOG_CHANNEL_ID = '1550753070726512730';
 const TERMINAL_LOG_CHANNEL = '1550789490518528010';
 const STATUS_CHANNEL_ID = '1550797478021038161';
 const FULL_LOGS_CHANNEL_ID = '1550791675486408754';
-
 const MAIN_COLOR = '#024442';
 
-// --- KLIENT DISCORD ---
+// --- INICJALIZACJA KLIENTA BOTA ---
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,
@@ -79,13 +74,15 @@ const client = new Client({
     ] 
 });
 
-// --- CENTRUM DOWODZENIA / PANEL WWW ---
+// =========================================================
+// PANEL WWW I KREATOR EMBEDÓW BEZPOŚREDNIO W PLIKU BOTA
+// =========================================================
 app.get('/panel', (req, res) => {
     let channelOptions = '';
     if (client.isReady()) {
         client.guilds.cache.forEach(guild => {
             guild.channels.cache.forEach(channel => {
-                if (channel.type === 0) {
+                if (channel.type === 0) { // Tylko kanały tekstowe
                     channelOptions += `<option value="${channel.id}">${guild.name} / #${channel.name}</option>`;
                 }
             });
@@ -100,98 +97,24 @@ app.get('/panel', (req, res) => {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Centrum Dowodzenia - rapldez</title>
             <style>
-                :root {
-                    --bg-main: #121214;
-                    --bg-card: #18181b;
-                    --border-color: #27272a;
-                    --accent: #5865F2;
-                    --accent-hover: #4752C4;
-                    --text-main: #f4f4f5;
-                    --text-muted: #a1a1aa;
-                    --terminal-bg: #09090b;
-                    --terminal-text: #22c55e;
-                }
-                body {
-                    background-color: var(--bg-main);
-                    color: var(--text-main);
-                    font-family: 'Inter', -apple-system, sans-serif;
-                    margin: 0;
-                    padding: 15px;
-                    box-sizing: border-box;
-                }
-                header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    background: var(--bg-card);
-                    border: 1px solid var(--border-color);
-                    padding: 15px 20px;
-                    border-radius: 12px;
-                    margin-bottom: 20px;
-                }
+                :root { --bg-main: #121214; --bg-card: #18181b; --border-color: #27272a; --accent: #5865F2; --text-main: #f4f4f5; --text-muted: #a1a1aa; --terminal-bg: #09090b; --terminal-text: #22c55e; }
+                body { background-color: var(--bg-main); color: var(--text-main); font-family: 'Inter', sans-serif; margin: 0; padding: 15px; }
+                header { display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); border: 1px solid var(--border-color); padding: 15px 20px; border-radius: 12px; margin-bottom: 20px; }
                 h1 { color: var(--text-main); margin: 0; font-size: 18px; font-weight: 600; }
-                .grid {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-                    gap: 20px;
-                    max-width: 1200px;
-                    margin: 0 auto;
-                }
-                .card {
-                    background: var(--bg-card);
-                    border: 1px solid var(--border-color);
-                    padding: 20px;
-                    border-radius: 12px;
-                }
+                .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+                .card { background: var(--bg-card); border: 1px solid var(--border-color); padding: 20px; border-radius: 12px; }
                 .card h3 { margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; font-size: 16px; }
                 .form-group { margin-bottom: 12px; }
                 label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
-                input, textarea, select {
-                    width: 100%;
-                    background: var(--terminal-bg);
-                    border: 1px solid var(--border-color);
-                    color: #fff;
-                    padding: 10px;
-                    border-radius: 8px;
-                    box-sizing: border-box;
-                    font-size: 13px;
-                }
+                input, textarea, select { width: 100%; background: var(--terminal-bg); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 8px; box-sizing: border-box; font-size: 13px; }
                 textarea { resize: vertical; height: 80px; }
-                .discord-embed-preview {
-                    background: #2b2d31;
-                    border-left: 4px solid #5865F2;
-                    padding: 12px;
-                    border-radius: 4px;
-                    margin-top: 15px;
-                    font-size: 13px;
-                }
+                .discord-embed-preview { background: #2b2d31; border-left: 4px solid #5865F2; padding: 12px; border-radius: 4px; margin-top: 15px; font-size: 13px; }
                 .embed-title { font-weight: bold; margin-bottom: 5px; }
                 .embed-desc { color: #dcddde; white-space: pre-wrap; word-break: break-all; }
-                .btn {
-                    background: var(--accent);
-                    color: white;
-                    border: none;
-                    padding: 10px 15px;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    font-weight: 600;
-                    width: 100%;
-                    margin-top: 10px;
-                }
+                .btn { background: var(--accent); color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 10px; }
                 .btn-success { background: #23a55a; }
                 .terminal-container { grid-column: 1 / -1; }
-                .terminal {
-                    background: var(--terminal-bg);
-                    border: 1px solid var(--border-color);
-                    border-radius: 8px;
-                    padding: 15px;
-                    height: 250px;
-                    overflow-y: auto;
-                    font-family: monospace;
-                    font-size: 12px;
-                    color: var(--terminal-text);
-                    line-height: 1.5;
-                }
+                .terminal { background: var(--terminal-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; height: 250px; overflow-y: auto; font-family: monospace; font-size: 12px; color: var(--terminal-text); line-height: 1.5; }
                 .terminal div { margin-bottom: 4px; white-space: pre-wrap; word-break: break-all; }
             </style>
         </head>
@@ -272,6 +195,7 @@ app.post('/send-embed', express.urlencoded({ extended: true }), async (req, res)
     }
     res.redirect('/panel');
 });
+// =========================================================
 
 // --- FUNKCJE POMOCNICZE ---
 const createLogEmbed = (title, desc) => new EmbedBuilder().setColor(MAIN_COLOR).setAuthor({ name: title }).setDescription(desc).setTimestamp();
@@ -487,7 +411,6 @@ app.get('/p/:id', async (req, res) => {
     res.send(paste.content);
 });
 
-// Map do śledzenia wiadomości (Anty-Spam)
 const userSpamMap = new Map();
 const SPAM_LIMIT = 5; 
 const SPAM_TIME = 4000; 
