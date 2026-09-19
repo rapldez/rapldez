@@ -101,11 +101,11 @@ app.get('/auth/discord/callback', async (req, res) => {
         }
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
-            headers: { authorization: `${tokenData.token_type}${tokenData.access_token}` },
+            headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
         });
 
         const userData = await userResponse.json();
-        console.log(`✅ OAUTH: Zalogowano użytkownika o ID: ${userData.id} (${userData.username})`);
+        console.log(`🔎 Pełna odpowiedź Discorda o użytkowniku:`, userData);
 
         if (userData.id === YOUR_DISCORD_ID) {
             req.session.user = { id: userData.id, username: userData.username };
