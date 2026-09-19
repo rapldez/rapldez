@@ -89,6 +89,17 @@ const Warn = mongoose.model('Warn', warnSchema);
 const embedPresetSchema = new mongoose.Schema({ name: String, content: String, authorName: String, authorUrl: String, authorIcon: String, title: String, description: String, color: String, image: String, thumbnail: String, footer: String, footerIcon: String, timestamp: Boolean, buttons: Array });
 const EmbedPreset = mongoose.model('EmbedPreset', embedPresetSchema);
 
+// Schemat Giveaways
+const giveawaySchema = new mongoose.Schema({
+    messageId: String,
+    channelId: String,
+    prize: String,
+    endsAt: Number,
+    ended: { type: Boolean, default: false },
+    participants: [String]
+});
+const Giveaway = mongoose.model('Giveaway', giveawaySchema);
+
 let dbStatus = 'Rozłączono';
 if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
@@ -106,7 +117,6 @@ const client = new Client({
     ] 
 });
 
-// Cache zaproszeń (InviteLogger)
 const guildInvitesCache = new Map();
 
 const sendCrashLog = async (error) => {
@@ -244,6 +254,7 @@ app.post('/api/kontakt', async (req, res) => {
     }
 });
 
+// TERMINAL API
 app.post('/api/terminal', async (req, res) => {
     const cmd = req.body.command ? req.body.command.trim() : '';
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ output: 'Odmowa dostępu.' });
@@ -279,7 +290,45 @@ app.post('/api/terminal', async (req, res) => {
         return res.json({ output: `Znaleziono słowo "${query}" w ticketach (${results.length}):\n${names}` });
     }
 
-    return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo]` });
+    // KOMENDA: giveaway [channelId] [czas_w_min] [nagroda]
+    if (cmdLower === 'giveaway') {
+        const channelId = cmdArgs[1];
+        const minutes = parseInt(cmdArgs[2]);
+        const prize = cmdArgs.slice(3).join(' ');
+
+        if (!channelId || isNaN(minutes) || !prize) {
+            return res.json({ output: 'Użycie: giveaway [ID_KANAŁU] [CZAS_W_MINUTACH] [NAGRODA]' });
+        }
+
+        const channel = client.channels.cache.get(channelId);
+        if (!channel) return res.json({ output: 'Błąd: Nie znaleziono kanału o podanym ID.' });
+
+        const endsAt = Date.now() + (minutes * 60 * 1000);
+        const embed = new EmbedBuilder()
+            .setColor(MAIN_COLOR)
+            .setAuthor({ name: '🎉 NOWY KONKURS (GIVEAWAY)' })
+            .setTitle(prize)
+            .setDescription(`>>> **• Nagroda:** \`${prize}\`\n**• Koniec:** <t:${Math.floor(endsAt / 1000)}:R> (<t:${Math.floor(endsAt / 1000)}:f>)\n**• Uczestnicy:** \`0\`\n\nKliknij przycisk poniżej, aby wziąć udział!`)
+            .setFooter({ text: 'rapldez OS • Konkursy' })
+            .setTimestamp();
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('join_giveaway').setLabel('Dołącz do losowania').setStyle(ButtonStyle.Success).setEmoji('🎉')
+        );
+
+        const gMsg = await channel.send({ embeds: [embed], components: [row] });
+        await Giveaway.create({
+            messageId: gMsg.id,
+            channelId: channel.id,
+            prize: prize,
+            endsAt: endsAt,
+            participants: []
+        });
+
+        return res.json({ output: `Wystartowano giveaway na kanale <#${channelId}> na ${minutes} minut. Nagroda: ${prize}` });
+    }
+
+    return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo], giveaway [kanał] [minuty] [nagroda]` });
 });
 
 // POBIERANIE WIADOMOŚCI DO EDYCJI
@@ -655,7 +704,6 @@ client.on('guildMemberAdd', async member => {
             }
         }
 
-        // Odświeżamy cache zaproszeń
         const currentInvMap = new Map();
         newInvites.forEach(inv => currentInvMap.set(inv.code, { uses: inv.uses, inviterId: inv.inviter?.id }));
         guildInvitesCache.set(member.guild.id, currentInvMap);
@@ -671,7 +719,6 @@ client.on('guildMemberAdd', async member => {
     sendServerLog('📥 Dołączenie członka (Invite Tracker)', logDesc);
 });
 
-// Dynamiczne aktualizowanie cache przy tworzeniu/usuwaniu zaproszeń
 client.on('inviteCreate', async invite => {
     const cached = guildInvitesCache.get(invite.guild.id) || new Map();
     cached.set(invite.code, { uses: invite.uses, inviterId: invite.inviter?.id });
@@ -696,12 +743,52 @@ client.on('roleDelete', r => sendServerLog('🗑️ Usunięcie roli', `Usunięto
 client.on('guildBanAdd', ban => sendServerLog('🔨 Zbanowanie członka', `Zbanowano \`${ban.user.tag}\`.`));
 client.on('guildBanRemove', ban => sendServerLog('🕊️ Odbanowanie członka', `Odbanowano \`${ban.user.tag}\`.`));
 
+// --- PETLA SPRAWDZAJĄCA ZAKOŃCZENIE GIVEAWAYÓW ---
+setInterval(async () => {
+    try {
+        const activeGiveaways = await Giveaway.find({ ended: false, endsAt: { $lte: Date.now() } });
+        for (const g of activeGiveaways) {
+            g.ended = true;
+            await g.save();
+
+            const channel = client.channels.cache.get(g.channelId);
+            if (!channel) continue;
+
+            const msg = await channel.messages.fetch(g.messageId).catch(() => null);
+            let winnerId = null;
+            if (g.participants.length > 0) {
+                winnerId = g.participants[Math.floor(Math.random() * g.participants.length)];
+            }
+
+            const endEmbed = new EmbedBuilder()
+                .setColor(winnerId ? '#23a559' : '#f23f42')
+                .setAuthor({ name: '🎉 KONKURS ZAKOŃCZONY' })
+                .setTitle(g.prize)
+                .setDescription(winnerId 
+                    ? `>>> **• Zwycięzca:** <@${winnerId}>\n**• Nagroda:** \`${g.prize}\`\n**• Uczestników:** \`${g.participants.length}\``
+                    : `>>> **• Nagroda:** \`${g.prize}\`\n**• Zwycięzca:** Brak (brak uczestników)`)
+                .setFooter({ text: 'rapldez OS • Wyniki' })
+                .setTimestamp();
+
+            if (msg) {
+                await msg.edit({ embeds: [endEmbed], components: [] }).catch(() => null);
+            }
+
+            if (winnerId) {
+                await channel.send({ content: `🎉 Gratulacje <@${winnerId}>! Wygrałeś: **${g.prize}**!` });
+                sendServerLog('🎁 Zakończono Giveaway', `Nagroda: **${g.prize}**\nZwycięzca: <@${winnerId}>\nKanał: <#${g.channelId}>`);
+            }
+        }
+    } catch (e) {
+        console.error('Błąd pętli giveaways:', e);
+    }
+}, 10 * 1000);
+
 // --- CYBERNETYCZNE CENTRUM DOWODZENIA (STATUS Z TELEMETRIĄ) ---
 client.once('ready', async () => {
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => { console.log(`Serwer działa na porcie ${PORT}!`); });
 
-    // Wczytanie początkowego stanu zaproszeń serwera do cache
     try {
         const guild = client.guilds.cache.get(SERVER_ID);
         if (guild) {
@@ -766,10 +853,47 @@ client.once('ready', async () => {
     }
 });
 
-// --- INTERAKCJE (TICKETY, WERYFIKACJA I PRZYCISKI) ---
+// --- INTERAKCJE (PRZYCISKI, GIVEAWAY, TICKETY) ---
 client.on('interactionCreate', async interaction => {
+    if (!interaction.isButton()) return;
+
+    // Przycisk dołączania do Giveawaya
+    if (interaction.customId === 'join_giveaway') {
+        try {
+            const g = await Giveaway.findOne({ messageId: interaction.message.id, ended: false });
+            if (!g) {
+                return interaction.reply({ content: '❌ Ten konkurs już się zakończył.', ephemeral: true });
+            }
+
+            if (g.participants.includes(interaction.user.id)) {
+                g.participants = g.participants.filter(id => id !== interaction.user.id);
+                await g.save();
+
+                const originalEmbed = interaction.message.embeds[0];
+                const updatedEmbed = EmbedBuilder.from(originalEmbed).setDescription(
+                    originalEmbed.description.replace(/\*\*• Uczestnicy:\*\* `\d+`/, `**• Uczestnicy:** \`${g.participants.length}\``)
+                );
+                await interaction.update({ embeds: [updatedEmbed] });
+                return interaction.followUp({ content: '👋 Opuściłeś losowanie.', ephemeral: true });
+            } else {
+                g.participants.push(interaction.user.id);
+                await g.save();
+
+                const originalEmbed = interaction.message.embeds[0];
+                const updatedEmbed = EmbedBuilder.from(originalEmbed).setDescription(
+                    originalEmbed.description.replace(/\*\*• Uczestnicy:\*\* `\d+`/, `**• Uczestnicy:** \`${g.participants.length}\``)
+                );
+                await interaction.update({ embeds: [updatedEmbed] });
+                return interaction.followUp({ content: '🎉 Zostałeś pomyślnie dodany do losowania! Powodzenia.', ephemeral: true });
+            }
+        } catch (e) {
+            console.error(e);
+            return interaction.reply({ content: 'Błąd podczas zapisywania.', ephemeral: true });
+        }
+    }
+
     // Obsługa przycisków kontrolnych panelu statusu
-    if (interaction.isButton() && (interaction.customId === 'status_restart_bot' || interaction.customId === 'status_refresh')) {
+    if (interaction.customId === 'status_restart_bot' || interaction.customId === 'status_refresh') {
         if (interaction.user.id !== YOUR_DISCORD_ID) {
             return interaction.reply({ content: '❌ Odmowa dostępu. Ten przycisk jest zarezerwowany dla właściciela systemu.', ephemeral: true });
         }
@@ -812,12 +936,10 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    if (interaction.isButton() && interaction.customId.startsWith('custom_btn_')) {
+    if (interaction.customId.startsWith('custom_btn_')) {
         await interaction.reply({ content: 'Przycisk interaktywny wygenerowany z panelu.', ephemeral: true });
         return;
     }
-
-    if (!interaction.isButton()) return;
 
     if (interaction.customId.startsWith('verify_role_')) {
         const roleId = interaction.customId.split('verify_role_')[1];
@@ -832,13 +954,6 @@ client.on('interactionCreate', async interaction => {
         } catch (err) {
             await interaction.reply({ content: '❌ Błąd uprawnień bota przy nadawaniu roli.', ephemeral: true });
         }
-        return;
-    }
-    
-    if (interaction.customId === 'crash_restart') {
-        if (interaction.user.id !== YOUR_DISCORD_ID) return interaction.reply({ content: 'Brak uprawnień.', ephemeral: true });
-        await interaction.reply('🔄 Restartuję system...');
-        setTimeout(() => process.exit(1), 1000);
         return;
     }
 
