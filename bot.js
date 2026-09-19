@@ -28,7 +28,6 @@ const client = new Client({
     ] 
 });
 
-// Zablokowany cache, żeby licznik zawsze rósł
 app.get('/api/views', (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     try {
@@ -55,14 +54,30 @@ app.post('/api/kontakt', async (req, res) => {
             return res.status(500).json({ error: 'Wystąpił błąd po stronie serwera.' });
         }
 
-        await guild.members.fetch(); 
-        
         const targetNick = nick.toLowerCase().trim();
-        const member = guild.members.cache.find(m => 
-            m.user.username.toLowerCase() === targetNick || 
-            (m.user.globalName && m.user.globalName.toLowerCase() === targetNick) ||
-            (m.nickname && m.nickname.toLowerCase() === targetNick)
-        );
+        let member = null;
+
+        try {
+            // Zaawansowane szukanie: bot odpytuje bezpośrednio API Discorda o wpisany nick
+            const searchResults = await guild.members.fetch({ query: nick, limit: 10 });
+            member = searchResults.find(m => 
+                m.user.username.toLowerCase() === targetNick || 
+                (m.user.globalName && m.user.globalName.toLowerCase() === targetNick) ||
+                (m.nickname && m.nickname.toLowerCase() === targetNick)
+            );
+
+            // Zapasowe szukanie, jeśli API nic nie zwróciło
+            if (!member) {
+                await guild.members.fetch(); 
+                member = guild.members.cache.find(m => 
+                    m.user.username.toLowerCase() === targetNick || 
+                    (m.user.globalName && m.user.globalName.toLowerCase() === targetNick) ||
+                    (m.nickname && m.nickname.toLowerCase() === targetNick)
+                );
+            }
+        } catch (fetchError) {
+            console.error("Błąd podczas wyszukiwania użytkownika:", fetchError);
+        }
 
         if (!member) {
             return res.status(403).json({ message: 'Nie znaleziono Cię na serwerze Discord. Dołącz z linku lub sprawdź poprawność nicku.' });
