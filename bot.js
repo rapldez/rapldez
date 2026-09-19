@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, AuditLogEvent } = require('discord.js');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -149,21 +149,34 @@ app.post('/api/terminal', async (req, res) => {
     const cmdLower = cmdArgs[0].toLowerCase();
 
     if (cmdLower === 'sysinfo') return res.json({ output: `Uptime: ${Math.floor(process.uptime())}s | RAM: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB \vert{} Ping:${client.ws.ping}ms` });
+    
     if (cmdLower === 'db' && cmdArgs[1] === 'stats') {
         const tickCount = await TicketArchive.countDocuments();
         const views = await Counter.findOne({ id: 'views' });
         return res.json({ output: `Statystyki bazy:\n- Zarchiwizowane tickety: ${tickCount}\n- Odsłony strony: ${views?.count || 0}` });
     }
+    
     if (cmdLower === 'paste' && cmdArgs.length > 1) {
         const shortId = Math.random().toString(36).substring(2, 8);
         await Paste.create({ shortId, content: cmd.substring(6), createdAt: new Date().toLocaleString() });
         return res.json({ output: `Zapisano kod. Link: https://rapldez.onrender.com/p/${shortId}` });
     }
+    
     if (cmdLower === 'bot' && cmdArgs[1] === 'status') {
         client.user.setActivity(cmd.substring(11));
         return res.json({ output: `Status zmieniony na: "${cmd.substring(11)}"` });
     }
-    return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst]` });
+
+    // NOWOŚĆ: Przeszukiwanie bazy ticketów
+    if (cmdLower === 'search' && cmdArgs.length > 1) {
+        const query = cmdArgs.slice(1).join(' ');
+        const results = await TicketArchive.find({ htmlContent: { $regex: query, $options: 'i' } });
+        if (results.length === 0) return res.json({ output: `Brak wyników w bazie dla słowa: "${query}"` });
+        const names = results.map(r => r.channelName).join(', ');
+        return res.json({ output: `Znaleziono słowo "${query}" w ticketach (${results.length}):\n${names}` });
+    }
+
+    return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo]` });
 });
 
 app.get('/p/:id', async (req, res) => {
@@ -212,6 +225,30 @@ client.on('messageCreate', async message => {
             });
             message.reply(`✅ Rola sklonowana pomyślnie: <@&${cloned.id}>`);
         } catch (err) { message.reply('Błąd podczas klonowania.'); }
+    }
+
+    // NOWOŚĆ: Generator weryfikacji
+    if (message.content.startsWith('!setup-verify') && message.author.id === YOUR_DISCORD_ID) {
+        const role = message.mentions.roles.first();
+        if (!role) return message.reply('Musisz oznaczyć rolę, którą bot ma nadać, np. `!setup-verify @Użytkownik`');
+
+        await message.delete().catch(()=>null);
+        
+        const embed = new EmbedBuilder()
+            .setColor(MAIN_COLOR)
+            .setTitle('✅ Weryfikacja konta')
+            .setDescription('Witamy na serwerze! Aby uzyskać pełny dostęp do kanałów, musisz potwierdzić, że zapoznałes się z regulaminem.\n\nKliknij przycisk poniżej, aby otrzymać rolę i odblokować serwer.')
+            .setFooter({ text: 'rapldez OS • Automatyczny system bezpieczeństwa' });
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`verify_role_${role.id}`)
+                .setLabel('Zweryfikuj się')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('🛡️')
+        );
+
+        await message.channel.send({ embeds: [embed], components: [row] });
     }
 
     if (message.content === '!backup' && message.author.id === YOUR_DISCORD_ID) {
@@ -291,19 +328,98 @@ client.once('ready', async () => {
     } catch (e) {}
 });
 
-// --- TICKETY ---
+// --- INTERAKCJE (TICKETY I WERYFIKACJA) ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
-    if (interaction.customId === 'close_ticket') {
-        const closedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
-        await interaction.channel.setTopic(`${interaction.channel.topic}|CLOSED:${closedAtStr}`).catch(()=>null);
-        await interaction.reply({ content: `🔒 Zamknięto (${closedAtStr}).`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj').setStyle(ButtonStyle.Danger))] });
+
+    // NOWOŚĆ: Obsługa weryfikacji z przycisku
+    if (interaction.customId.startsWith('verify_role_')) {
+        const roleId = interaction.customId.split('verify_role_')[1];
+        const role = interaction.guild.roles.cache.get(roleId);
+        
+        if (!role) return interaction.reply({ content: '❌ Błąd: Rola weryfikacyjna już nie istnieje.', ephemeral: true });
+        
+        if (interaction.member.roles.cache.has(roleId)) {
+            return interaction.reply({ content: 'Jesteś już zweryfikowany!', ephemeral: true });
+        }
+
+        try {
+            await interaction.member.roles.add(role);
+            await interaction.reply({ content: '✅ Zostałeś pomyślnie zweryfikowany! Uzyskałeś dostęp do serwera.', ephemeral: true });
+            sendServerLog('🛡️ Pomyślna Weryfikacja', `Użytkownik <@${interaction.user.id}> zweryfikował się przez system i otrzymał rolę <@&${roleId}>.`);
+        } catch (err) {
+            await interaction.reply({ content: '❌ Błąd: Bot nie ma uprawnień, aby nadać Ci tę rolę (Rola bota musi być wyżej na liście ról niż ta rola).', ephemeral: true });
+        }
+        return;
     }
+    
+    if (interaction.customId === 'crash_restart') {
+        if (interaction.user.id !== YOUR_DISCORD_ID) return interaction.reply({ content: 'Brak uprawnień.', ephemeral: true });
+        await interaction.reply('🔄 Restartuję system...');
+        setTimeout(() => process.exit(1), 1000);
+        return;
+    }
+
+    if (interaction.user.id !== YOUR_DISCORD_ID && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) return;
+
+    const topic = interaction.channel.topic || '';
+    const parts = topic.split('|');
+    let targetId = parts[0] || 'brak_id';
+    let createdAtStr = 'Nieznana';
+    const createdPart = parts.find(p => p && p.startsWith('CREATED:'));
+    if (createdPart) createdAtStr = createdPart.replace('CREATED:', '');
+
+    if (interaction.customId === 'close_ticket') {
+        if (targetId && targetId !== 'brak_id') await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
+        const closedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+        interaction.channel.setTopic(`${targetId}|CREATED:${createdAtStr}|CLOSED:${closedAtStr}`).catch(() => null);
+
+        const reopenRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
+            new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
+        );
+        await interaction.reply({ content: `🔒 Zgłoszenie zamknięte (${closedAtStr}).`, components: [reopenRow] });
+    }
+
+    if (interaction.customId === 'open_ticket') {
+        if (targetId && targetId !== 'brak_id') await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: true }).catch(() => null);
+        const closeRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
+            new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
+        );
+        await interaction.reply({ content: `🔓 Zgłoszenie otwarte dla <@${targetId}>.`, components: [closeRow] });
+    }
+
     if (interaction.customId === 'archive_ticket') {
         await interaction.reply('📁 Generuję archiwum...');
-        setTimeout(() => interaction.channel.delete().catch(()=>null), 4000);
-        const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-        if (logChannel) await logChannel.send({ embeds: [createLogEmbed('📁 ARCHIWUM ZGŁOSZENIA', `Kanał: \`${interaction.channel.name}\` zarchiwizowany przez <@${interaction.user.id}>.`)] });
+        try {
+            let messages = await interaction.channel.messages.fetch({ limit: 100 });
+            messages = Array.from(messages.values()).reverse();
+            const participantsSet = new Set();
+            messages.forEach(m => { if (!m.author.bot) participantsSet.add(m.author.username); });
+            const participantsList = participantsSet.size > 0 ? Array.from(participantsSet).join(', ') : 'Brak interakcji';
+
+            let closedAtStr = 'Nie zamknięto ręcznie';
+            const closedPart = parts.find(p => p && p.startsWith('CLOSED:'));
+            if (closedPart) closedAtStr = closedPart.replace('CLOSED:', '');
+            const archivedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+
+            let htmlContent = `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Archiwum</title><style>body{background:#313338;color:#dbdee1;font-family:sans-serif;padding:20px}.message{margin-bottom:15px}.author{font-weight:bold;color:#f2f3f5}.content{background:#2b2d31;padding:10px;border-radius:6px;display:inline-block}</style></head><body><h2>Archiwum: ${interaction.channel.name}</h2>`;
+            messages.forEach(m => { htmlContent += `<div class="message"><span class="author">${m.author.username}</span> <span style="font-size:11px;color:#949ba4">${m.createdAt.toLocaleString('pl-PL')}</span><br><div class="content">${m.content || '[Media]'}</div></div>`; });
+            htmlContent += `</body></html>`;
+
+            await TicketArchive.create({ channelName: interaction.channel.name, messagesCount: messages.length, participants: Array.from(participantsSet), createdAt: createdAtStr, closedAt: closedAtStr, archivedAt: archivedAtStr, archivedBy: interaction.user.username, htmlContent: htmlContent });
+
+            const embedLog = new EmbedBuilder()
+                .setColor(MAIN_COLOR)
+                .setAuthor({ name: '📁 ARCHIWUM ZGŁOSZENIA' })
+                .setDescription(`>>> **• Kanał:** \`${interaction.channel.name}\`\n**• Wiadomości:** \`${messages.length}\`\n**• Uczestnicy:** \`${participantsList}\`\n**• Otwarcie:** \`${createdAtStr}\`\n**• Zamknięcie:** \`${closedAtStr}\`\n**• Archiwizacja:** \`${archivedAtStr}\`\n**• Zarchiwizował:** <@${interaction.user.id}>`)
+                .setFooter({ text: 'rapldez.onrender.com' }).setTimestamp();
+
+            const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
+            if (logChannel) await logChannel.send({ embeds: [embedLog] });
+        } catch (err) {}
+        setTimeout(() => { interaction.channel.delete().catch(() => null); }, 4000);
     }
 });
 
