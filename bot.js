@@ -109,8 +109,7 @@ const sendCrashLog = async (error) => {
     const channel = client.channels.cache.get(TERMINAL_LOG_CHANNEL);
     if (!channel) return;
     const embed = createLogEmbed('⚠️ Krytyczny Błąd Systemu', `Wykryto awarię aplikacji na Renderze. Zrzut:\n\`\`\`js\n${error.stack ? error.stack.substring(0, 3000) : error}\n\`\`\``);
-    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('crash_restart').setLabel('Zrestartuj Serwer').setStyle(ButtonStyle.Danger).setEmoji('🔄'));
-    await channel.send({ content: `<@${YOUR_DISCORD_ID}> Awaria!`, embeds: [embed], components: [row] }).catch(() => null);
+    await channel.send({ embeds: [embed] }).catch(() => null);
 };
 
 process.on('uncaughtException', async (err) => { console.error(err); await sendCrashLog(err); });
