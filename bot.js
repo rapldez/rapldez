@@ -113,7 +113,8 @@ app.get('/auth/discord', (req, res) => res.redirect(`https://discord.com/api/oau
 
 app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
-    const userIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    // POBIERANIE TYLKO PIERWSZEGO, PRAWDZIWEGO IP KLIENTA Z PROXY RENDERA
+    let userIP = req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : req.socket.remoteAddress;
 
     if (!code) return res.redirect('/?error=no_code');
     if (await isVPN(userIP)) {
@@ -162,7 +163,7 @@ app.get('/api/views', async (req, res) => {
     }
 });
 
-// NAPRAWIONY ENDPOINT FORMULARZA KONTAKTOWEGO (/api/kontakt)
+// FORMULARZ KONTAKTOWY (/api/kontakt)
 app.post('/api/kontakt', async (req, res) => {
     const { nick, subject, message } = req.body;
     if (!nick || !message || !subject) return res.status(400).json({ error: 'Brakujące dane' });
@@ -432,7 +433,6 @@ client.once('ready', async () => {
     try {
         const statusChannel = client.channels.cache.get(STATUS_CHANNEL_ID);
         if (statusChannel) {
-            // Czyszczenie kanału statusu ze starych śmieci
             const fetchedMessages = await statusChannel.messages.fetch({ limit: 10 });
             if (fetchedMessages.size > 0) {
                 await statusChannel.bulkDelete(fetchedMessages, true).catch(() => {});
@@ -452,7 +452,6 @@ client.once('ready', async () => {
 
             const statusMsg = await statusChannel.send({ embeds: [getStatusEmbed()] });
 
-            // Edycja tej samej wiadomości co 5 minut
             setInterval(async () => {
                 try {
                     await statusMsg.edit({ embeds: [getStatusEmbed()] });
@@ -506,7 +505,7 @@ client.on('interactionCreate', async interaction => {
         interaction.channel.setTopic(`${targetId}|CREATED:${createdAtStr}|CLOSED:${closedAtStr}`).catch(() => null);
 
         const reopenRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
+            new ButtonBuilder().setCustomId('open_timer').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
         );
         await interaction.reply({ content: `🔒 Zgłoszenie zamknięte (${closedAtStr}).`, components: [reopenRow] });
