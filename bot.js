@@ -512,11 +512,17 @@ client.once('ready', async () => {
                 .setTimestamp()
                 .setFooter({ text: 'rapldez.onrender.com • Panel Automatycznego Statusu' });
 
-            const statusMsg = await statusChannel.send({ embeds: [getStatusEmbed()] });
+            // Przyciski kontrolne statusu (zabezpieczone w interakcjach dla roota)
+            const statusRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('status_restart_bot').setLabel('Restart Bota').setStyle(ButtonStyle.Danger).setEmoji('🔄'),
+                new ButtonBuilder().setCustomId('status_refresh').setLabel('Odśwież Status').setStyle(ButtonStyle.Secondary).setEmoji('📊')
+            );
+
+            const statusMsg = await statusChannel.send({ embeds: [getStatusEmbed()], components: [statusRow] });
 
             setInterval(async () => {
                 try {
-                    await statusMsg.edit({ embeds: [getStatusEmbed()] });
+                    await statusMsg.edit({ embeds: [getStatusEmbed()], components: [statusRow] });
                 } catch (e) {}
             }, 5 * 60 * 1000);
         }
@@ -527,6 +533,39 @@ client.once('ready', async () => {
 
 // --- INTERAKCJE (TICKETY, WERYFIKACJA I PRZYCISKI) ---
 client.on('interactionCreate', async interaction => {
+    // Obsługa przycisków kontrolnych panelu statusu
+    if (interaction.isButton() && (interaction.customId === 'status_restart_bot' || interaction.customId === 'status_refresh')) {
+        if (interaction.user.id !== YOUR_DISCORD_ID) {
+            return interaction.reply({ content: '❌ Odmowa dostępu. Ten przycisk jest zarezerwowany dla właściciela systemu.', ephemeral: true });
+        }
+        
+        if (interaction.customId === 'status_restart_bot') {
+            await interaction.reply({ content: '🔄 Wykonuję zdalny restart bota...', ephemeral: true });
+            logToTerminalDiscord('🔄 Zdalny Restart', `Zainicjowany przez <@${interaction.user.id}> poprzez panel statusu.`);
+            setTimeout(() => process.exit(1), 1000);
+        } else if (interaction.customId === 'status_refresh') {
+            const getStatusEmbed = () => new EmbedBuilder()
+                .setColor(MAIN_COLOR)
+                .setAuthor({ name: '🟢 RAPLDEZ OS • MONITOR SYSTEMU' })
+                .setDescription(
+                    `>>> **• 🤖 Stan Bota:** \`Online (Stabilny)\`\n` +
+                    `**• 🌐 Stan Strony:** \`Online (Render Cloud)\`\n` +
+                    `**• 🗄️ Stan Bazy Danych:** \`${dbStatus}\`\n` +
+                    `**• 📶 Aktualny Ping:** \`${client.ws.ping}ms\``
+                )
+                .setTimestamp()
+                .setFooter({ text: 'rapldez.onrender.com • Panel Automatycznego Statusu' });
+
+            const statusRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('status_restart_bot').setLabel('Restart Bota').setStyle(ButtonStyle.Danger).setEmoji('🔄'),
+                new ButtonBuilder().setCustomId('status_refresh').setLabel('Odśwież Status').setStyle(ButtonStyle.Secondary).setEmoji('📊')
+            );
+
+            await interaction.update({ embeds: [getStatusEmbed()], components: [statusRow] });
+        }
+        return;
+    }
+
     if (interaction.isButton() && interaction.customId.startsWith('custom_btn_')) {
         await interaction.reply({ content: 'Przycisk interaktywny wygenerowany z panelu.', ephemeral: true });
         return;
