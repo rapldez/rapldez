@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>rapldez</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -51,7 +51,7 @@
         .builder-section { background: #1e1f22; border: 1px solid #2b2d31; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
         .builder-section-header { padding: 10px 14px; background: #2b2d31; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 13px; color: #fff; }
         .builder-section-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-        .builder-input { background: #111214; border: 1px solid #383a40; padding: 8px 10px; color: #fff; border-radius: 6px; outline: none; font-size: 13px; width: 100%; box-sizing: border-box; }
+        .builder-input { background: #111214; border: 1px solid #383a40; padding: 8px 10px; color: #fff; border-radius: 6px; outline: none; font-size: 16px; width: 100%; box-sizing: border-box; }
         .builder-input:focus { border-color: #5865F2; }
         .builder-label { font-size: 11px; color: #949ba4; font-weight: 600; text-transform: uppercase; margin-top: 4px; }
         
@@ -307,16 +307,16 @@
                 <div class="about-section">
                     <h3>O Mnie</h3>
                     <div class="about-content">
-                        <p class="type-line" data-text="Siema, jestem Radek, mam 22 lata. Na co dzień pracuję, a po godzinach odpalam MTA – to moja główna gra od lat. Świetnie czuję klimat RPG, lubię interakcje i budowanie ciekawej rozgrywki."><i class="fa-solid fa-user"></i> <span></span></p>
-                        <p class="type-line" data-text="Rozwijam się jako początkujący skrypter. Techniczna strona serwerów nie jest mi obca:"><i class="fa-solid fa-code"></i> <span></span></p>
+                        <p class="type-line" data-text="Siema, jestem Radek. Pracuję, a w wolnym czasie gram w MTA (RPG). Lubię tworzyć ciekawą rozgrywkę."><i class="fa-solid fa-user"></i> <span></span></p>
+                        <p class="type-line" data-text="Rozwijam się jako skrypter, technikalia serwerowe nie są mi obce:"><i class="fa-solid fa-code"></i> <span></span></p>
                         <div class="skills-container" style="opacity: 0;">
                             <span class="skill-tag" data-lang="Lua" style="border-color: #0052cc; color: #4da6ff; background: rgba(0, 82, 204, 0.15);">Lua</span>
                             <span class="skill-tag" data-lang="Node.js" style="border-color: #2e7d32; color: #66bb6a; background: rgba(46, 125, 50, 0.15);">Node.js</span>
                             <span class="skill-tag" data-lang="Python" style="border-color: #fbc02d; color: #ffee58; background: rgba(251, 192, 45, 0.15);">Python</span>
                             <span class="skill-tag" data-lang="SQL" style="border-color: #f57c00; color: #ffa726; background: rgba(245, 124, 0, 0.15);">SQL</span>
                         </div>
-                        <p class="type-line" data-text="Poza komputerem kręcę kilometry na szosie i gravelu albo biegam. Sport uczy mnie dyscypliny, co przekłada się na moje podejście – angażuję się na 100%. Złapiesz mnie też na spontanicznych podróżach po Polsce."><i class="fa-solid fa-bicycle"></i> <span></span></p>
-                        <p class="type-line" data-text="Szukam ekipy z dobrą atmosferą i wzajemnym szacunkiem. Od siebie daję dojrzałe podejście, dużą aktywność i brak konfliktowości."><i class="fa-solid fa-handshake"></i> <span></span></p>
+                        <p class="type-line" data-text="Poza PC kręcę kilometry na szosie i biegam. Sport uczy dyscypliny – angażuję się w 100%."><i class="fa-solid fa-bicycle"></i> <span></span></p>
+                        <p class="type-line" data-text="Szukam ekipy z dobrą atmosferą. Gwarantuję dojrzałe podejście, dużą aktywność i brak fochów."><i class="fa-solid fa-handshake"></i> <span></span></p>
                     </div>
                 </div>
 
@@ -502,7 +502,6 @@
             };
         }
 
-        // --- NOWA FUNKCJA WCZYTYWANIA Z SERWERA ---
         async function loadExistingMessage() {
             const channelId = document.getElementById('embed-channel').value.trim();
             const messageId = document.getElementById('embed-message-id').value.trim();
