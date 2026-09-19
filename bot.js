@@ -26,7 +26,7 @@ const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const REDIRECT_URI = process.env.DISCORD_REDIRECT_URI;
 
 const SERVER_ID = '1516145205215232050'; 
-const CATEGORY_ID = '1516145205936394455'; // Zaktualizowana kategoria głosowa
+const CATEGORY_ID = '1516145205936394455'; // Kategoria głosowa
 const VOICE_CREATOR_CHANNEL_ID = '1516643168479608963'; // ID kanału twórcy głosowego
 const YOUR_DISCORD_ID = '920029957739139083';
 
@@ -481,12 +481,12 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         if (!oldState.serverDeaf && newState.serverDeaf) sendServerLog('🎧 Ogłuszenie (Deafen)', `${user} ogłuszony serwerowo.`);
     }
 
-    // System "Stwórz swój głos"
+    // System "Stwórz swój głos" ze zmienioną nazwą
     try {
         if (newState.channelId === VOICE_CREATOR_CHANNEL_ID) {
             const guild = newState.guild;
             const member = newState.member;
-            const channelName = `🔊 • ${member.user.username}`;
+            const channelName = `🔒 | Prywatny pokój: ${member.displayName || member.user.username}`;
 
             const createdChannel = await guild.channels.create({
                 name: channelName,
