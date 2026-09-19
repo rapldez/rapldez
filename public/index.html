@@ -6,19 +6,28 @@
     <title>rapldez</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .toast-container { position: fixed; bottom: 30px; right: 30px; display: flex; flex-direction: column; gap: 12px; z-index: 9999; }
+        .toast { background: rgba(17, 18, 20, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.05); color: #fff; padding: 16px 24px; border-radius: 12px; font-size: 14px; display: flex; align-items: center; gap: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); transform: translateX(120%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .toast.show { transform: translateX(0); }
+        .toast.success i { color: #23a559; font-size: 18px; }
+        .toast.error i { color: #f23f42; font-size: 18px; }
+        .weather-widget { display: inline-flex; align-items: center; gap: 6px; color: #a0a0a0; margin-left: 8px; }
+        
+        .auth-bar { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; font-size: 13px; }
+        .discord-login-btn { background: #5865F2; color: white; padding: 6px 12px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-flex; align-items: center; gap: 6px; }
+        .discord-login-btn:hover { background: #4752C4; }
+    </style>
 </head>
 <body>
 
-    <div id="enter-screen">
-        <p>WELCOME</p>
-    </div>
-    
+    <div id="enter-screen"><p>WELCOME</p></div>
     <div class="cursor-trail" id="cursor-trail"></div>
 
     <video id="bg-video" loop muted playsinline>
         <source src="https://files.catbox.moe/d45t9u.mp4" type="video/mp4">
     </video>
-    <audio id="bg-audio" loop>
+    <audio id="bg-audio" loop crossorigin="anonymous">
         <source src="muzyka.mp3" type="audio/mpeg">
     </audio>
 
@@ -27,6 +36,11 @@
             <div class="terminal-header">
                 <span>root@rapldez:</span>
                 <i class="fa-solid fa-xmark" id="close-terminal"></i>
+            </div>
+            <!-- Pasek autoryzacji Discord OAuth2 wewnątrz terminala -->
+            <div id="auth-bar" class="auth-bar">
+                <span id="auth-status-text">Sprawdzanie uprawnień...</span>
+                <div id="auth-action-container"></div>
             </div>
             <div class="terminal-body" id="terminal-output"></div>
             <form id="terminal-form" class="terminal-input-line" style="margin: 0; display: flex;">
@@ -47,7 +61,6 @@
                 <input type="text" id="contact-subject" placeholder="Temat kontaktu" required>
                 <textarea id="contact-message" placeholder="Treść wiadomości..." rows="4" required></textarea>
                 <button id="send-contact-btn">Wyślij zgłoszenie</button>
-                <div id="contact-status"></div>
                 <div class="contact-disclaimer">Wiadomość trafia bezpośrednio na mój serwer Discord.</div>
             </div>
         </div>
@@ -62,29 +75,26 @@
     <div class="container" id="main-content" style="opacity: 0; pointer-events: none;">
         <div class="card-wrapper">
             <div class="card">
-                
                 <div class="card-content">
                     <div class="avatar-wrapper">
                         <img src="https://cdn.discordapp.com/embed/avatars/0.png" id="discord-avatar" alt="Awatar" class="avatar">
                         <img src="ramka.png" alt="Ramka" class="avatar-decoration" onerror="this.style.display='none'">
                     </div>
-                    
                     <div class="info-section">
                         <div class="name-row">
                             <h1 class="glitch-hover" data-text="rapldez">rapldez</h1>
                             <div id="badges-container"></div>
-                            
                             <div class="status-pill">
                                 <div class="status-dot offline" id="status-dot"></div>
                                 <span id="discord-status">Ładowanie...</span>
                                 <span class="clock-separator">•</span>
                                 <span class="clock-text" id="live-clock">00:00:00</span>
+                                <span class="clock-separator">•</span>
+                                <span id="weather-szczecin" class="weather-widget"><i class="fa-solid fa-cloud"></i> --°C</span>
                             </div>
                         </div>
-                        
                         <p class="subtitle">digital ghost</p>
                         <p id="typewriter-text"></p>
-                        
                         <div class="socials">
                             <a href="https://discord.gg/cyvKv8YvU7" target="_blank"><i class="fa-brands fa-discord"></i></a>
                             <a href="https://www.tiktok.com/@rapldez?_r=1&_t=ZN-99qdU42JgUY" target="_blank"><i class="fa-brands fa-tiktok"></i></a>
@@ -97,18 +107,14 @@
                     <h3>O Mnie</h3>
                     <div class="about-content">
                         <p class="type-line" data-text="Siema, jestem Radek, mam 22 lata. Na co dzień pracuję, a po godzinach odpalam MTA – to moja główna gra od lat. Świetnie czuję klimat RPG, lubię interakcje i budowanie ciekawej rozgrywki."><i class="fa-solid fa-user"></i> <span></span></p>
-                        
                         <p class="type-line" data-text="Rozwijam się jako początkujący skrypter. Techniczna strona serwerów nie jest mi obca:"><i class="fa-solid fa-code"></i> <span></span></p>
-                        
                         <div class="skills-container" style="opacity: 0;">
                             <span class="skill-tag" data-lang="Lua" style="border-color: #0052cc; color: #4da6ff; background: rgba(0, 82, 204, 0.15);">Lua</span>
                             <span class="skill-tag" data-lang="Node.js" style="border-color: #2e7d32; color: #66bb6a; background: rgba(46, 125, 50, 0.15);">Node.js</span>
                             <span class="skill-tag" data-lang="Python" style="border-color: #fbc02d; color: #ffee58; background: rgba(251, 192, 45, 0.15);">Python</span>
                             <span class="skill-tag" data-lang="SQL" style="border-color: #f57c00; color: #ffa726; background: rgba(245, 124, 0, 0.15);">SQL</span>
                         </div>
-
                         <p class="type-line" data-text="Poza komputerem kręcę kilometry na szosie i gravelu albo biegam. Sport uczy mnie dyscypliny, co przekłada się na moje podejście – angażuję się na 100%. Złapiesz mnie też na spontanicznych podróżach po Polsce."><i class="fa-solid fa-bicycle"></i> <span></span></p>
-                        
                         <p class="type-line" data-text="Szukam ekipy z dobrą atmosferą i wzajemnym szacunkiem. Od siebie daję dojrzałe podejście, dużą aktywność i brak konfliktowości."><i class="fa-solid fa-handshake"></i> <span></span></p>
                     </div>
                 </div>
@@ -129,6 +135,7 @@
                     <div class="music-info">
                         <div class="track-name">Nieznany Tytuł</div>
                         <div class="track-artist">Nieznany Wykonawca</div>
+                        <canvas id="audio-visualizer" width="200" height="25" style="width: 100%; height: 25px; display: block; margin: 4px 0;"></canvas>
                         <div class="progress-wrapper">
                             <span id="current-time">0:00</span>
                             <input type="range" id="track-progress" value="0" min="0" max="100">
@@ -157,6 +164,7 @@
         </div>
     </div>
 
+    <div id="toast-container" class="toast-container"></div>
     <script src="script.js"></script>
 </body>
 </html>
