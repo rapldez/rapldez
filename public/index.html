@@ -29,10 +29,11 @@
                 <i class="fa-solid fa-xmark" id="close-terminal"></i>
             </div>
             <div class="terminal-body" id="terminal-output"></div>
-            <div class="terminal-input-line">
+            <!-- OTO POPRAWKA: Używamy form, żeby klawiatura w telefonie łapała Enter -->
+            <form id="terminal-form" class="terminal-input-line" style="margin: 0; display: flex;">
                 <span class="prompt">root@rapldez:</span>
-                <input type="text" id="terminal-input" autocomplete="off" spellcheck="false">
-            </div>
+                <input type="text" id="terminal-input" autocomplete="off" spellcheck="false" style="flex-grow: 1; background: transparent; border: none; color: inherit; font-family: inherit; outline: none; margin-left: 5px;">
+            </form>
         </div>
     </div>
 
