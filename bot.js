@@ -12,6 +12,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SERVER_ID = '1516145205215232050'; 
 const CATEGORY_ID = '1550704110691422318'; 
+const YOUR_DISCORD_ID = '920029957739139083';
 const COUNTER_FILE = path.join(__dirname, 'licznik.txt');
 
 if (!fs.existsSync(COUNTER_FILE)) {
@@ -39,7 +40,7 @@ app.get('/api/views', (req, res) => {
 });
 
 app.post('/api/kontakt', async (req, res) => {
-    const { nick, discordId, subject, message } = req.body;
+    const { nick, subject, message } = req.body;
 
     if (!nick || !message || !subject) {
         return res.status(400).json({ error: 'Brakujące dane' });
@@ -52,14 +53,14 @@ app.post('/api/kontakt', async (req, res) => {
             return res.status(500).json({ error: 'Bot nie widzi serwera.' });
         }
 
-        let member = null;
-        if (discordId) {
-            try {
-                member = await guild.members.fetch(discordId.trim());
-            } catch (err) {
-                console.log(`Nie znaleziono użytkownika o ID: ${discordId}`);
-            }
-        }
+        await guild.members.fetch(); 
+        
+        const targetNick = nick.toLowerCase();
+        const member = guild.members.cache.find(m => 
+            m.user.username.toLowerCase() === targetNick || 
+            (m.user.globalName && m.user.globalName.toLowerCase() === targetNick) ||
+            (m.nickname && m.nickname.toLowerCase() === targetNick)
+        );
 
         let permissionOverwrites = [
             {
@@ -83,22 +84,29 @@ app.post('/api/kontakt', async (req, res) => {
             permissionOverwrites: permissionOverwrites
         });
 
+        const memberIdText = member ? member.id : 'Brak użytkownika na serwerze';
+        const memberPing = member ? `<@${member.id}>` : `\`${nick}\``;
+        const avatarUrl = member ? member.user.displayAvatarURL({ dynamic: true }) : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
         const embed = new EmbedBuilder()
-            .setAuthor({ 
-                name: `Zgłoszenie od: ${nick}`, 
-                iconURL: member ? member.user.displayAvatarURL({ dynamic: true }) : 'https://cdn.discordapp.com/embed/avatars/0.png' 
-            })
-            .setTitle(subject)
-            .setColor('#2b2d31') 
-            .setDescription(`>>> ${message}`) 
-            .addFields(
-                { name: 'Discord ID', value: discordId ? `\`${discordId}\`` : 'Nie podano', inline: true },
-                { name: 'Status', value: member ? `✅ Na serwerze (<@${member.id}>)` : '❌ Brak na serwerze', inline: true }
-            )
+            .setColor('#111214')
+            .setAuthor({ name: '🎫 RAPLDEZ • TICKET', iconURL: avatarUrl })
+            .setThumbnail(avatarUrl)
+            .setDescription(`
+**• 👤 × Informacje o nadawcy:**
+\`—\` **× Ping:** ${memberPing}
+\`—\` **× Nick:** \`${nick}\`
+\`—\` **× ID:** \`${memberIdText}\`
+
+**• 📩 × Informacje o zgłoszeniu:**
+\`—\` **× Temat:** \`${subject}\`
+\`—\` **× Treść:**
+\`\`\`text\n${message}\n\`\`\`
+            `)
             .setFooter({ text: 'rapldez OS • System zgłoszeń' })
             .setTimestamp();
 
-        await newChannel.send({ embeds: [embed] });
+        await newChannel.send({ content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie!`, embeds: [embed] });
         res.status(200).json({ success: true, message: 'Zgłoszenie utworzone.' });
 
     } catch (error) {
