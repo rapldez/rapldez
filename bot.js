@@ -33,7 +33,7 @@ const YOUR_DISCORD_ID = '920029957739139083';
 const LOG_CHANNEL_ID = '1550753070726512730'; 
 const TERMINAL_LOG_CHANNEL = '1550789490518528010';
 const STATUS_CHANNEL_ID = '1550797478021038161';
-const FULL_LOGS_CHANNEL_ID = 'WPISZ_ID_KANALU'; // <-- TUTAJ WPISZ ID KANAŁU NA PEŁNE LOGI SERWERA
+const FULL_LOGS_CHANNEL_ID = '1550791675486408754';
 
 // --- FUNKCJE POMOCNICZE (LOGI TERMINALA #024442) ---
 async function logToTerminalDiscord(title, description) {
@@ -87,6 +87,30 @@ const client = new Client({
         GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates
     ] 
+});
+
+// --- CRASH MONITOR ---
+const sendCrashLog = async (error) => {
+    const channel = client.channels.cache.get(LOG_CHANNEL_ID);
+    if (!channel) return;
+    const embed = new EmbedBuilder()
+        .setColor('#ed4245')
+        .setTitle('⚠️ Krytyczny Błąd Systemu')
+        .setDescription(`Wykryto awarię aplikacji na Renderze. Ostatni zrzut błędu:\n\`\`\`js\n${error.stack ? error.stack.substring(0, 3000) : error}\n\`\`\``)
+        .setTimestamp();
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('crash_restart').setLabel('Zrestartuj Serwer').setStyle(ButtonStyle.Danger).setEmoji('🔄')
+    );
+    await channel.send({ content: `<@${YOUR_DISCORD_ID}> Serwer napotkał problem!`, embeds: [embed], components: [row] }).catch(() => null);
+};
+
+process.on('uncaughtException', async (err) => {
+    console.error('Niezłapany błąd:', err);
+    await sendCrashLog(err);
+});
+process.on('unhandledRejection', async (reason, promise) => {
+    console.error('Niezłapana obietnica:', reason);
+    await sendCrashLog(reason);
 });
 
 // --- OAUTH2 DISCORD LOGIN ---
@@ -219,6 +243,37 @@ client.on('messageCreate', async message => {
             message.reply(`✅ Rola sklonowana pomyślnie. Nowa rola: <@&${cloned.id}>`);
         } catch (err) { message.reply('Błąd podczas klonowania.'); }
     }
+
+    if (message.content === '!backup' && message.author.id === YOUR_DISCORD_ID) {
+        const counters = await Counter.find();
+        const archives = await TicketArchive.find();
+        const data = JSON.stringify({ statystyki: counters, archiwum_ticketow: archives }, null, 2);
+        
+        const buffer = Buffer.from(data, 'utf-8');
+        const attachment = new AttachmentBuilder(buffer, { name: `rapldez_backup_${Date.now()}.json` });
+        
+        await message.reply({ content: '📦 **Backup wygenerowany:** Pełny zrzut bazy danych w formacie JSON.', files: [attachment] });
+    }
+
+    if (message.content.startsWith('!embed') && message.author.id === YOUR_DISCORD_ID) {
+        const rawArgs = message.content.replace('!embed', '').trim();
+        if (!rawArgs) return;
+        const parts = rawArgs.split('|');
+        const embedData = {};
+        parts.forEach(part => {
+            const index = part.indexOf('=');
+            if (index !== -1) embedData[part.substring(0, index).trim().toLowerCase()] = part.substring(index + 1).trim();
+        });
+        const embed = new EmbedBuilder();
+        if (embedData.title) embed.setTitle(embedData.title);
+        if (embedData.desc) embed.setDescription(embedData.desc.replace(/\\n/g, '\n'));
+        embed.setColor(embedData.color && /^#[0-9A-F]{6}$/i.test(embedData.color) ? embedData.color : '#111214');
+        if (embedData.footer) embed.setFooter({ text: embedData.footer });
+        if (embedData.author) embed.setAuthor({ name: embedData.author });
+
+        await message.channel.send({ embeds: [embed] });
+        await message.delete().catch(() => null);
+    }
 });
 
 // --- PEŁNE LOGI SERWERA ---
@@ -265,13 +320,127 @@ client.once('ready', async () => {
                 
             const statusMsg = await statusChannel.send({ embeds: [embed] });
             
-            // Auto-update pingu co 10 minut
             setInterval(() => {
                 embed.setDescription(`**Status infrastruktury:** Stabilny\n**Aktualny Ping:** \`${client.ws.ping}ms\``).setTimestamp();
                 statusMsg.edit({ embeds: [embed] }).catch(()=>null);
             }, 10 * 60 * 1000);
         }
     } catch (e) { console.error(e); }
+});
+
+// --- OBSŁUGA INTERAKCJI (TICKETY I PRZYCISKI) ---
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isButton()) return;
+    
+    if (interaction.customId === 'crash_restart') {
+        if (interaction.user.id !== YOUR_DISCORD_ID) return interaction.reply({ content: 'Brak uprawnień.', ephemeral: true });
+        await interaction.reply('🔄 Restartuję system za pośrednictwem środowiska...');
+        setTimeout(() => process.exit(1), 1000);
+        return;
+    }
+
+    if (interaction.user.id !== YOUR_DISCORD_ID && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+        return interaction.reply({ content: 'Tylko administrator.', ephemeral: true });
+    }
+
+    const topic = interaction.channel.topic || '';
+    const parts = topic.split('|');
+    let targetId = parts[0] || 'brak_id';
+    let createdAtStr = 'Nieznana';
+    
+    const createdPart = parts.find(p => p && p.startsWith('CREATED:'));
+    if (createdPart) createdAtStr = createdPart.replace('CREATED:', '');
+
+    if (interaction.customId === 'close_ticket') {
+        if (targetId && targetId !== 'brak_id') {
+            await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
+        }
+        const closedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+        interaction.channel.setTopic(`${targetId}|CREATED:${createdAtStr}|CLOSED:${closedAtStr}`).catch(() => null);
+
+        const reopenRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
+            new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
+        );
+        await interaction.reply({ content: `🔒 Zgłoszenie zamknięte (${closedAtStr}).`, components: [reopenRow] });
+    }
+
+    if (interaction.customId === 'open_ticket') {
+        if (targetId && targetId !== 'brak_id') {
+            await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: true }).catch(() => null);
+        }
+        const closeRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
+            new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
+        );
+        await interaction.reply({ content: `🔓 Zgłoszenie otwarte dla <@${targetId}>.`, components: [closeRow] });
+    }
+
+    if (interaction.customId === 'archive_ticket') {
+        await interaction.reply('📁 Generuję szczegółowe archiwum...');
+        try {
+            let messages = await interaction.channel.messages.fetch({ limit: 100 });
+            messages = Array.from(messages.values()).reverse();
+            
+            const participantsSet = new Set();
+            messages.forEach(m => {
+                if (!m.author.bot) participantsSet.add(m.author.username);
+            });
+            const participantsList = participantsSet.size > 0 ? Array.from(participantsSet).join(', ') : 'Brak interakcji';
+
+            let closedAtStr = 'Nie zamknięto ręcznie';
+            const closedPart = parts.find(p => p && p.startsWith('CLOSED:'));
+            if (closedPart) {
+                closedAtStr = closedPart.replace('CLOSED:', '');
+            } else if (topic.includes('CLOSED:')) {
+                const match = topic.match(/CLOSED:([^|]+)/);
+                if (match) closedAtStr = match[1];
+            }
+            
+            const archivedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+
+            let htmlContent = `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Archiwum</title><style>body{background:#313338;color:#dbdee1;font-family:sans-serif;padding:20px}.message{margin-bottom:15px}.author{font-weight:bold;color:#f2f3f5}.content{background:#2b2d31;padding:10px;border-radius:6px;display:inline-block}</style></head><body><h2>Archiwum: ${interaction.channel.name}</h2>`;
+            messages.forEach(m => {
+                htmlContent += `<div class="message"><span class="author">${m.author.username}</span> <span style="font-size:11px;color:#949ba4">${m.createdAt.toLocaleString('pl-PL')}</span><br><div class="content">${m.content || '[Media]'}</div></div>`;
+            });
+            htmlContent += `</body></html>`;
+
+            await TicketArchive.create({
+                channelName: interaction.channel.name,
+                messagesCount: messages.length,
+                participants: Array.from(participantsSet),
+                createdAt: createdAtStr,
+                closedAt: closedAtStr,
+                archivedAt: archivedAtStr,
+                archivedBy: interaction.user.username,
+                htmlContent: htmlContent
+            });
+
+            const embedLog = new EmbedBuilder()
+                .setColor('#024442')
+                .setAuthor({ name: '📁 ARCHIWUM ZGŁOSZENIA' })
+                .setDescription(
+                    `>>> **• Kanał:** \`${interaction.channel.name}\`\n` +
+                    `**• Wiadomości:** \`${messages.length}\`\n` +
+                    `**• Uczestnicy:** \`${participantsList}\`\n` +
+                    `**• Otwarcie:** \`${createdAtStr}\`\n` +
+                    `**• Zamknięcie:** \`${closedAtStr}\`\n` +
+                    `**• Archiwizacja:** \`${archivedAtStr}\`\n` +
+                    `**• Zarchiwizował:** <@${interaction.user.id}>`
+                )
+                .setFooter({ text: 'rapldez.onrender.com • Baza Danych MongoDB' })
+                .setTimestamp();
+
+            const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
+            if (logChannel) {
+                await logChannel.send({ embeds: [embedLog] });
+            }
+        } catch (err) {
+            console.log('Błąd archiwizacji:', err);
+        }
+
+        setTimeout(() => { interaction.channel.delete().catch(() => null); }, 4000);
+    }
 });
 
 const PORT = process.env.PORT || 3000;
