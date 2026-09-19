@@ -2,21 +2,23 @@ const express = require('express');
 const router = express.Router();
 
 let liveLogs = [];
+let botClient = null;
 
+// Przechwytywanie logów do terminala w panelu
 const originalConsoleLog = console.log;
 console.log = function(...args) {
     const text = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' ');
-    liveLogs.unshift(`[${new Date().toLocaleTimeString()}] ${text}`);
+    liveLogs.unshift(`[${new Date().toLocaleTimeString()}]${text}`);
     if (liveLogs.length > 150) liveLogs.pop();
     originalConsoleLog.apply(console, args);
 };
 
-// Globalna referencja do klienta bota ustawiana po starcie
-let botClient = null;
+// Funkcja do ustawienia klienta bota
 router.setClient = function(client) {
     botClient = client;
 };
 
+// Strona główna panelu WWW
 router.get('/panel', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -193,6 +195,7 @@ router.get('/panel', (req, res) => {
     `);
 });
 
+// Obsługa wysyłania embeda z panelu
 router.post('/send-embed', express.urlencoded({ extended: true }), async (req, res) => {
     const { channelId, title, description } = req.body;
     
