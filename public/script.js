@@ -19,6 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const badgesContainer = document.getElementById('badges-container');
 
     const playPauseBtn = document.getElementById('play-pause-btn');
+    const prevTrackBtn = document.getElementById('prev-track-btn');
+    const nextTrackBtn = document.getElementById('next-track-btn');
     const trackProgress = document.getElementById('track-progress');
     const currTimeDisp = document.getElementById('current-time');
     const totalTimeDisp = document.getElementById('total-time');
@@ -241,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         termInput.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter' || e.keyCode === 13) {
+            if (e.key === 'Enter') {
                 e.preventDefault();
                 const command = this.value.trim().toLowerCase();
                 this.value = '';
@@ -344,7 +346,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- FORMULARZ KONTAKTOWY (WYSYŁA DO WŁASNEGO ENDPOINTU NA RENDER) ---
     const openContactBtn = document.getElementById('open-contact');
     const closeContactBtn = document.getElementById('close-contact');
     const contactOverlay = document.getElementById('contact-overlay');
@@ -378,16 +379,12 @@ document.addEventListener('DOMContentLoaded', () => {
             contactStatus.innerText = "Wysyłanie zgłoszenia...";
             sendContactBtn.disabled = true;
 
-            const formData = new FormData();
-            formData.append('nick', nick);
-            formData.append('discord', discord);
-            formData.append('subject', subject);
-            formData.append('message', message);
+            const formData = { nick, discordId: discord, subject, message };
 
-            // Bezpośredni adres do API na tym samym serwerze
             fetch('/api/kontakt', {
                 method: 'POST',
-                body: formData
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
             })
             .then(res => res.json())
             .then(data => {
@@ -472,6 +469,23 @@ document.addEventListener('DOMContentLoaded', () => {
             if(bgAudio.paused) { bgAudio.play(); playPauseBtn.className = "fa-solid fa-pause"; } 
             else { bgAudio.pause(); playPauseBtn.className = "fa-solid fa-play"; }
         });
+
+        if(prevTrackBtn) {
+            prevTrackBtn.addEventListener('click', () => {
+                bgAudio.currentTime = 0;
+                bgAudio.play().catch(e=>{});
+                playPauseBtn.className = "fa-solid fa-pause";
+            });
+        }
+
+        if(nextTrackBtn) {
+            nextTrackBtn.addEventListener('click', () => {
+                bgAudio.currentTime = 0;
+                bgAudio.play().catch(e=>{});
+                playPauseBtn.className = "fa-solid fa-pause";
+            });
+        }
+
         bgAudio.addEventListener('timeupdate', () => {
             if(bgAudio.duration) {
                 trackProgress.value = (bgAudio.currentTime / bgAudio.duration) * 100;
