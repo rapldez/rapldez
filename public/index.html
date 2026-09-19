@@ -51,10 +51,12 @@
         .builder-section { background: #1e1f22; border: 1px solid #2b2d31; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
         .builder-section-header { padding: 10px 14px; background: #2b2d31; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 13px; color: #fff; }
         .builder-section-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-        .builder-input { background: #111214; border: 1px solid #383a40; padding: 8px 10px; color: #fff; border-radius: 6px; outline: none; font-size: 16px; width: 100%; box-sizing: border-box; }
+        .builder-input { background: #111214; border: 1px solid #383a40; padding: 8px 10px; color: #fff; border-radius: 6px; outline: none; font-size: 16px; width: 100%; box-sizing: border-box; } /* Dodano font-size 16px żeby zabić zooma */
         .builder-input:focus { border-color: #5865F2; }
         .builder-label { font-size: 11px; color: #949ba4; font-weight: 600; text-transform: uppercase; margin-top: 4px; }
         
+        #terminal-input { font-size: 16px; } /* Dodano font-size 16px żeby zabić zooma */
+
         .discord-preview-box { background: #313338; border-radius: 8px; padding: 14px; font-family: 'gg sans', sans-serif; font-size: 14px; color: #dbdee1; position: relative; }
         .discord-embed-card { background: #2b2d31; border-radius: 4px; border-left: 4px solid #024442; padding: 12px; display: flex; gap: 12px; margin-top: 6px; word-break: break-word; }
         .discord-embed-content { flex-grow: 1; display: flex; flex-direction: column; gap: 6px; }
@@ -307,16 +309,15 @@
                 <div class="about-section">
                     <h3>O Mnie</h3>
                     <div class="about-content">
-                        <p class="type-line" data-text="Siema, jestem Radek. Pracuję, a w wolnym czasie gram w MTA (RPG). Lubię tworzyć ciekawą rozgrywkę."><i class="fa-solid fa-user"></i> <span></span></p>
-                        <p class="type-line" data-text="Rozwijam się jako skrypter, technikalia serwerowe nie są mi obce:"><i class="fa-solid fa-code"></i> <span></span></p>
+                        <!-- Sekcja mocno skrócona i bardziej czytelna -->
+                        <p class="type-line" data-text="Gram w MTA (serwery RPG) i skupiam się na dewelopment'cie serwerów."><i class="fa-solid fa-gamepad"></i> <span></span></p>
+                        <p class="type-line" data-text="Piszę w: Lua, JS, Node.js oraz bazy SQL."><i class="fa-solid fa-code"></i> <span></span></p>
                         <div class="skills-container" style="opacity: 0;">
                             <span class="skill-tag" data-lang="Lua" style="border-color: #0052cc; color: #4da6ff; background: rgba(0, 82, 204, 0.15);">Lua</span>
                             <span class="skill-tag" data-lang="Node.js" style="border-color: #2e7d32; color: #66bb6a; background: rgba(46, 125, 50, 0.15);">Node.js</span>
-                            <span class="skill-tag" data-lang="Python" style="border-color: #fbc02d; color: #ffee58; background: rgba(251, 192, 45, 0.15);">Python</span>
                             <span class="skill-tag" data-lang="SQL" style="border-color: #f57c00; color: #ffa726; background: rgba(245, 124, 0, 0.15);">SQL</span>
                         </div>
-                        <p class="type-line" data-text="Poza PC kręcę kilometry na szosie i biegam. Sport uczy dyscypliny – angażuję się w 100%."><i class="fa-solid fa-bicycle"></i> <span></span></p>
-                        <p class="type-line" data-text="Szukam ekipy z dobrą atmosferą. Gwarantuję dojrzałe podejście, dużą aktywność i brak fochów."><i class="fa-solid fa-handshake"></i> <span></span></p>
+                        <p class="type-line" data-text="Prywatnie dużo sportu: kolarstwo szosowe i bieganie. Szukam dojrzałej ekipy."><i class="fa-solid fa-bolt"></i> <span></span></p>
                     </div>
                 </div>
 
