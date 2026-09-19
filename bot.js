@@ -28,10 +28,14 @@ const REDIRECT_URI = process.env.DISCORD_REDIRECT_URI;
 const SERVER_ID = '1516145205215232050'; 
 const CATEGORY_ID = '1550704110691422318'; 
 const YOUR_DISCORD_ID = '920029957739139083';
+
+// Kanały
 const LOG_CHANNEL_ID = '1550753070726512730'; 
 const TERMINAL_LOG_CHANNEL = '1550789490518528010';
+const STATUS_CHANNEL_ID = '1550797478021038161';
+const FULL_LOGS_CHANNEL_ID = 'WPISZ_ID_KANALU'; // <-- TUTAJ WPISZ ID KANAŁU NA PEŁNE LOGI SERWERA
 
-// --- FUNKCJE POMOCNICZE (NOWE EMBEDY LOGÓW #024442) ---
+// --- FUNKCJE POMOCNICZE (LOGI TERMINALA #024442) ---
 async function logToTerminalDiscord(title, description) {
     try {
         const channel = client.channels.cache.get(TERMINAL_LOG_CHANNEL);
@@ -39,11 +43,11 @@ async function logToTerminalDiscord(title, description) {
         
         const embed = new EmbedBuilder()
             .setColor('#024442')
-            .setAuthor({ name: '💻 PANEL ADMINISTRACYJNY' })
+            .setAuthor({ name: '💻 TERMINAL WWW • LOGI SYSTEMOWE' })
             .setTitle(title)
             .setDescription(description)
             .setTimestamp()
-            .setFooter({ text: 'rapldez.onrender.com • System Logowania' });
+            .setFooter({ text: 'rapldez.onrender.com • Zabezpieczenia' });
             
         await channel.send({ embeds: [embed] });
     } catch (e) {
@@ -51,246 +55,128 @@ async function logToTerminalDiscord(title, description) {
     }
 }
 
+// Sprawdzanie VPN (darmowe API)
+async function isVPN(ip) {
+    if (ip === '127.0.0.1' || ip === '::1' || !ip) return false;
+    try {
+        const res = await fetch(`http://ip-api.com/json/${ip}?fields=proxy`);
+        const data = await res.json();
+        return data.proxy === true;
+    } catch (e) { return false; }
+}
+
 // --- MONGODB SCHEMAS ---
-const counterSchema = new mongoose.Schema({
-    id: { type: String, default: 'views' },
-    count: { type: Number, default: 0 }
-});
+const counterSchema = new mongoose.Schema({ id: { type: String, default: 'views' }, count: { type: Number, default: 0 } });
 const Counter = mongoose.model('Counter', counterSchema);
 
 const ticketArchiveSchema = new mongoose.Schema({
-    channelName: String,
-    messagesCount: Number,
-    participants: [String],
-    createdAt: String,
-    closedAt: String,
-    archivedAt: String,
-    archivedBy: String,
-    htmlContent: String
+    channelName: String, messagesCount: Number, participants: [String],
+    createdAt: String, closedAt: String, archivedAt: String, archivedBy: String, htmlContent: String
 });
 const TicketArchive = mongoose.model('TicketArchive', ticketArchiveSchema);
 
+const pasteSchema = new mongoose.Schema({ shortId: String, content: String, createdAt: String });
+const Paste = mongoose.model('Paste', pasteSchema);
+
 if (MONGO_URI) {
-    mongoose.connect(MONGO_URI)
-        .then(() => console.log('✅ Połączono z bazą MongoDB!'))
-        .catch(err => console.error('❌ Błąd połączenia z MongoDB:', err));
+    mongoose.connect(MONGO_URI).then(() => console.log('✅ Połączono z bazą MongoDB!')).catch(err => console.error('❌ Błąd z MongoDB:', err));
 }
 
 const client = new Client({ 
     intents: [
-        GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates
     ] 
-});
-
-// --- CRASH MONITOR ---
-const sendCrashLog = async (error) => {
-    const channel = client.channels.cache.get(LOG_CHANNEL_ID);
-    if (!channel) return;
-    const embed = new EmbedBuilder()
-        .setColor('#ed4245')
-        .setTitle('⚠️ Krytyczny Błąd Systemu')
-        .setDescription(`Wykryto awarię aplikacji na Renderze. Ostatni zrzut błędu:\n\`\`\`js\n${error.stack ? error.stack.substring(0, 3000) : error}\n\`\`\``)
-        .setTimestamp();
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('crash_restart').setLabel('Zrestartuj Serwer').setStyle(ButtonStyle.Danger).setEmoji('🔄')
-    );
-    await channel.send({ content: `<@${YOUR_DISCORD_ID}> Serwer napotkał problem!`, embeds: [embed], components: [row] }).catch(() => null);
-};
-
-process.on('uncaughtException', async (err) => {
-    console.error('Niezłapany błąd:', err);
-    await sendCrashLog(err);
-});
-process.on('unhandledRejection', async (reason, promise) => {
-    console.error('Niezłapana obietnica:', reason);
-    await sendCrashLog(reason);
 });
 
 // --- OAUTH2 DISCORD LOGIN ---
 app.get('/auth/discord', (req, res) => {
-    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`;
-    res.redirect(discordAuthUrl);
+    res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`);
 });
 
 app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
+    const userIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
     if (!code) return res.redirect('/?error=no_code');
+    
+    // Sprawdzenie VPN przed zalogowaniem
+    const vpnDetected = await isVPN(userIP);
+    if (vpnDetected) {
+        logToTerminalDiscord('🛡️ Odrzucono ruch (VPN/Proxy)', `System zablokował próbę logowania z ukrytego adresu IP.\n**Adres IP:** \`${userIP}\``);
+        return res.redirect('/?error=vpn_blocked');
+    }
 
     try {
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
             method: 'POST',
-            body: new URLSearchParams({
-                client_id: CLIENT_ID,
-                client_secret: CLIENT_SECRET,
-                grant_type: 'authorization_code',
-                code: code,
-                redirect_uri: REDIRECT_URI,
-            }),
+            body: new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, grant_type: 'authorization_code', code: code, redirect_uri: REDIRECT_URI }),
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         });
 
         const tokenData = await tokenResponse.json();
         if (!tokenData.access_token) return res.redirect('/?error=bad_token');
 
-        const userResponse = await fetch('https://discord.com/api/users/@me', {
-            headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
-        });
-
+        const userResponse = await fetch('https://discord.com/api/users/@me', { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
         const userData = await userResponse.json();
 
         if (userData.id === YOUR_DISCORD_ID) {
             req.session.user = { id: userData.id, username: userData.username };
-            logToTerminalDiscord('🛡️ Autoryzacja udana', `Panel Admina został pomyślnie odblokowany przez **${userData.username}**.`);
+            logToTerminalDiscord('🔑 Autoryzacja udana', `Panel Administratora został pomyślnie odblokowany przez **${userData.username}**.\n**IP:** \`${userIP}\``);
             return res.redirect('/?login=success');
         } else {
-            logToTerminalDiscord('⚠️ Zablokowano dostęp', `Odrzucono próbę autoryzacji do systemu.\n**Przechwycony profil:** \`${userData.username}\` (${userData.id})`);
+            logToTerminalDiscord('⚠️ Zablokowano dostęp', `Nieudana próba wejścia do terminala.\n**Profil:** \`${userData.username}\` (${userData.id})\n**IP:** \`${userIP}\``);
             return res.redirect('/?error=unauthorized');
         }
-    } catch (error) {
-        res.redirect('/?error=server_error');
-    }
+    } catch (error) { res.redirect('/?error=server_error'); }
 });
 
-app.get('/api/check-auth', (req, res) => {
-    if (req.session && req.session.user && req.session.user.id === YOUR_DISCORD_ID) {
-        res.json({ authenticated: true, username: req.session.user.username });
-    } else {
-        res.json({ authenticated: false });
-    }
-});
-
-app.post('/api/logout', (req, res) => {
-    req.session.destroy(() => { res.json({ success: true }); });
-});
-
-// --- API STRONY ---
-app.get('/api/views', async (req, res) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    try {
-        if (!MONGO_URI) return res.json({ views: 'Brak Bazy' });
-        let counter = await Counter.findOne({ id: 'views' });
-        if (!counter) counter = new Counter({ id: 'views', count: 0 });
-        counter.count += 1;
-        await counter.save();
-        res.json({ views: counter.count });
-    } catch (err) {
-        res.status(500).json({ views: 'Live' });
-    }
-});
-
-app.post('/api/kontakt', async (req, res) => {
-    const { nick, subject, message } = req.body;
-    if (!nick || !message || !subject) return res.status(400).json({ error: 'Brakujące dane' });
-
-    try {
-        const guild = client.guilds.cache.get(SERVER_ID);
-        if (!guild) return res.status(500).json({ message: 'Błąd serwera.' });
-
-        const inputClean = nick.toLowerCase().trim();
-        let member = null;
-        try {
-            const searchResults = await guild.members.fetch({ query: inputClean, limit: 10 });
-            member = searchResults.find(m => m.user.username.toLowerCase() === inputClean || (m.user.globalName && m.user.globalName.toLowerCase() === inputClean));
-            if (!member) {
-                const allMembers = await guild.members.fetch(); 
-                member = allMembers.find(m => m.user.username.toLowerCase() === inputClean);
-            }
-        } catch (e) {}
-
-        const permissionOverwrites = [{ id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }];
-        if (member) {
-            permissionOverwrites.push({ id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
-        }
-
-        const safeNick = nick.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 16) || 'nieznany';
-        const channelName = `ticket-${safeNick}`;
-        const createdAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
-        const topicData = `${member ? member.id : 'brak_id'}\vert{}CREATED:${createdAtStr}`;
-        
-        const newChannel = await guild.channels.create({
-            name: channelName,
-            type: ChannelType.GuildText,
-            parent: CATEGORY_ID,
-            topic: topicData,
-            permissionOverwrites: permissionOverwrites
-        });
-
-        const embed = new EmbedBuilder()
-            .setColor('#111214')
-            .setAuthor({ name: '🎫 RAPLDEZ • ZGŁOSZENIE ZE STRONY' })
-            .setDescription(`**• 👤 × Nadawca:** \`${nick}\` (${member ? `<@${member.id}>` : 'Brak na serwerze'})\n**• 📩 × Temat:** \`${subject}\`\n**• 🕒 × Otwarto:** \`${createdAtStr}\`\n\`\`\`text\n${message}\n\`\`\``)
-            .setFooter({ text: 'rapldez OS • System zgłoszeń' });
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
-            new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj').setStyle(ButtonStyle.Danger).setEmoji('📁')
-        );
-
-        await newChannel.send({ content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie!`, embeds: [embed], components: [row] });
-        res.status(200).json({ message: 'Zgłoszenie wysłane!' });
-    } catch (error) {
-        res.status(500).json({ message: 'Wystąpił błąd serwera.' });
-    }
-});
-
-// --- GITHUB WEBHOOK ---
-app.post('/webhook/github', async (req, res) => {
-    const channel = client.channels.cache.get(LOG_CHANNEL_ID);
-    if (channel) {
-        await channel.send('🔄 **GitHub Hook:** Wykryto wypchnięcie nowego kodu na GitHuba. Zarządzam automatyczny restart bota...');
-    }
-    res.sendStatus(200);
-    setTimeout(() => process.exit(1), 2000);
-});
-
-// --- KOMENDY TERMINALA WWW ---
+// --- API STRONY & TERMINAL ---
 app.post('/api/terminal', async (req, res) => {
     const cmd = req.body.command ? req.body.command.trim() : '';
-
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) {
-        logToTerminalDiscord('🚫 Blokada zabezpieczeń', `Zablokowano próbę wykonania polecenia bez uprawnień roota.\n**Wpisano:** \`${cmd || '[Puste]'}\`\n**Adres IP:** \`${req.ip || 'Nieznane'}\``);
-        return res.status(403).json({ output: 'Odmowa dostępu. Brak autoryzacji roota.' });
+        return res.status(403).json({ output: 'Odmowa dostępu.' });
     }
 
-    logToTerminalDiscord('⌨️ Wykonano polecenie', `Administrator wywołał komendę w terminalu WWW:\n\`\`\`bash\n${cmd || '[Puste]'}\n\`\`\``);
-
-    const cmdLower = cmd.toLowerCase();
+    logToTerminalDiscord('⌨️ Wykonano polecenie', `**Komenda:** \`${cmd || '[Puste]'}\``);
+    const cmdArgs = cmd.split(' ');
+    const cmdLower = cmdArgs[0].toLowerCase();
 
     if (cmdLower === 'sysinfo') {
         const mem = Math.round(process.memoryUsage().rss / 1024 / 1024);
-        const uptime = Math.floor(process.uptime());
-        return res.json({ output: `System Uptime: ${uptime}s | RAM Usage: ${mem}MB \vert{} WS Ping:${client.ws.ping}ms` });
+        return res.json({ output: `Uptime: ${Math.floor(process.uptime())}s | RAM: ${mem}MB \vert{} Ping:${client.ws.ping}ms` });
     }
     
-    if (cmdLower === 'db stats') {
+    if (cmdLower === 'db' && cmdArgs[1] === 'stats') {
         const tickCount = await TicketArchive.countDocuments();
         const views = await Counter.findOne({ id: 'views' });
-        return res.json({ output: `MongoDB Atlas Stats:\n- Zarchiwizowane tickety: ${tickCount}\n- Liczba odsłon strony: ${views ? views.count : 0}` });
+        return res.json({ output: `Statystyki bazy:\n- Zarchiwizowane tickety: ${tickCount}\n- Odsłony strony: ${views ? views.count : 0}` });
     }
     
-    if (cmdLower.startsWith('bot status ')) {
+    if (cmdLower === 'paste' && cmdArgs.length > 1) {
+        const content = cmd.substring(6);
+        const shortId = Math.random().toString(36).substring(2, 8);
+        await Paste.create({ shortId, content, createdAt: new Date().toLocaleString() });
+        return res.json({ output: `Zapisano kod. Link: https://rapldez.onrender.com/p/${shortId}` });
+    }
+
+    if (cmdLower === 'bot' && cmdArgs[1] === 'status') {
         const statusText = cmd.substring(11);
         client.user.setActivity(statusText);
-        return res.json({ output: `Ustawiono nowy status bota: "${statusText}"` });
+        return res.json({ output: `Status zmieniony na: "${statusText}"` });
     }
 
-    return res.json({ output: `Nie rozpoznano polecenia: ${cmd}. Dostępne: sysinfo, db stats, bot status [tekst]` });
+    return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst]` });
 });
 
-app.post('/api/reboot', (req, res) => {
-    if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) {
-        logToTerminalDiscord('🚫 Zablokowano restart', `Próba wymuszenia restartu serwera bez uprawnień roota.\n**Adres IP:** \`${req.ip || 'Nieznane'}\``);
-        return res.status(403).json({ error: 'Brak uprawnień' });
-    }
-    logToTerminalDiscord('🔄 Zdalny restart', `Administrator wymusił polecenie \`reboot\`. Zamykanie procesów chmury...`);
-    res.json({ message: 'Restart...' });
-    setTimeout(() => process.exit(1), 1000);
+app.get('/p/:id', async (req, res) => {
+    const paste = await Paste.findOne({ shortId: req.params.id });
+    if (!paste) return res.send('Brak kodu o tym ID.');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(paste.content);
 });
 
-// --- KOMENDY NA DISCORDZIE ---
+// --- KOMENDY DISCORD ---
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
@@ -299,174 +185,94 @@ client.on('messageCreate', async message => {
         const amount = parseInt(args[1]);
 
         if (isNaN(amount) || amount < 1 || amount > 100) {
-            return message.reply('Podaj prawidłową liczbę od 1 do 100, np. `!clear 10`').then(m => setTimeout(() => m.delete().catch(()=>null), 3000));
+            return message.reply('Podaj liczbę (1-100), np. `!clear 10`').then(m => setTimeout(() => m.delete().catch(()=>null), 3000));
         }
 
         await message.delete().catch(() => null);
-        const deleted = await message.channel.bulkDelete(amount, true).catch(err => {
-            message.channel.send('Wystąpił błąd podczas usuwania wiadomości (wiadomości starsze niż 14 dni nie mogą być kasowane grupowo).').then(m => setTimeout(() => m.delete().catch(()=>null), 4000));
-            return null;
-        });
+        const deleted = await message.channel.bulkDelete(amount, true).catch(() => null);
 
         if (deleted) {
             const fb = new EmbedBuilder()
                 .setColor('#024442')
-                .setDescription(`🧹 **Teren czysty!**\nUsunięto \`${deleted.size}\` wiadomości na polecenie administratora.`);
+                .setAuthor({ name: '🛠️ PANEL KONTROLNY' })
+                .setDescription(`>>> **Status:** Pomyślnie usunięto wiadomości.\n**Zlikwidowano:** \`${deleted.size}\` sztuk.`)
+                .setFooter({ text: 'Wiadomość ulegnie autodestrukcji za 5s' });
+                
             const msg = await message.channel.send({ embeds: [fb] });
-            setTimeout(() => msg.delete().catch(() => null), 4000);
+            setTimeout(() => msg.delete().catch(() => null), 5000);
         }
     }
 
-    if (message.content === '!backup' && message.author.id === YOUR_DISCORD_ID) {
-        const counters = await Counter.find();
-        const archives = await TicketArchive.find();
-        const data = JSON.stringify({ statystyki: counters, archiwum_ticketow: archives }, null, 2);
-        
-        const buffer = Buffer.from(data, 'utf-8');
-        const attachment = new AttachmentBuilder(buffer, { name: `rapldez_backup_${Date.now()}.json` });
-        
-        await message.reply({ content: '📦 **Backup wygenerowany:** Pełny zrzut bazy danych w formacie JSON.', files: [attachment] });
-    }
+    if (message.content.startsWith('!clone-role') && message.author.id === YOUR_DISCORD_ID) {
+        const args = message.content.split(' ');
+        const targetRole = message.mentions.roles.first() || message.guild.roles.cache.get(args[1]);
+        const newName = args.slice(2).join(' ') || `${targetRole.name} - Kopia`;
 
-    if (message.content.startsWith('!embed') && message.author.id === YOUR_DISCORD_ID) {
-        const rawArgs = message.content.replace('!embed', '').trim();
-        if (!rawArgs) return;
-        const parts = rawArgs.split('|');
-        const embedData = {};
-        parts.forEach(part => {
-            const index = part.indexOf('=');
-            if (index !== -1) embedData[part.substring(0, index).trim().toLowerCase()] = part.substring(index + 1).trim();
-        });
-        const embed = new EmbedBuilder();
-        if (embedData.title) embed.setTitle(embedData.title);
-        if (embedData.desc) embed.setDescription(embedData.desc.replace(/\\n/g, '\n'));
-        embed.setColor(embedData.color && /^#[0-9A-F]{6}$/i.test(embedData.color) ? embedData.color : '#111214');
-        if (embedData.footer) embed.setFooter({ text: embedData.footer });
-        if (embedData.author) embed.setAuthor({ name: embedData.author });
-
-        await message.channel.send({ embeds: [embed] });
-        await message.delete().catch(() => null);
+        if (!targetRole) return message.reply('Oznacz rolę do sklonowania: `!clone-role @rola Nowa Nazwa`');
+        
+        try {
+            const cloned = await message.guild.roles.create({
+                name: newName, color: targetRole.color, hoist: targetRole.hoist,
+                permissions: targetRole.permissions, mentionable: targetRole.mentionable,
+                reason: `Sklonowano z polecenia roota`
+            });
+            message.reply(`✅ Rola sklonowana pomyślnie. Nowa rola: <@&${cloned.id}>`);
+        } catch (err) { message.reply('Błąd podczas klonowania.'); }
     }
 });
 
-// --- OBSŁUGA INTERAKCJI (TICKETY I PRZYCISKI) ---
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isButton()) return;
-    
-    if (interaction.customId === 'crash_restart') {
-        if (interaction.user.id !== YOUR_DISCORD_ID) return interaction.reply({ content: 'Brak uprawnień.', ephemeral: true });
-        await interaction.reply('🔄 Restartuję system za pośrednictwem środowiska...');
-        setTimeout(() => process.exit(1), 1000);
-        return;
+// --- PEŁNE LOGI SERWERA ---
+client.on('messageDelete', async (message) => {
+    if (message.author?.bot) return;
+    const channel = client.channels.cache.get(FULL_LOGS_CHANNEL_ID);
+    if (!channel) return;
+
+    const embed = new EmbedBuilder()
+        .setColor('#ed4245')
+        .setAuthor({ name: '🗑️ Wiadomość usunięta' })
+        .setDescription(`**Autor:** ${message.author} (${message.author.id})\n**Kanał:** ${message.channel}\n\n**Treść:**\n\`\`\`text\n${message.content || '[Brak tekstu / Obraz]'}\n\`\`\``)
+        .setTimestamp();
+    channel.send({ embeds: [embed] });
+});
+
+client.on('voiceStateUpdate', (oldState, newState) => {
+    const channel = client.channels.cache.get(FULL_LOGS_CHANNEL_ID);
+    if (!channel) return;
+
+    if (!oldState.channelId && newState.channelId) {
+        const embed = new EmbedBuilder().setColor('#23a559').setDescription(`🔊 **${newState.member.user.tag}** dołączył do kanału <#${newState.channelId}>`).setTimestamp();
+        channel.send({ embeds: [embed] });
+    } else if (oldState.channelId && !newState.channelId) {
+        const embed = new EmbedBuilder().setColor('#ed4245').setDescription(`🔇 **${oldState.member.user.tag}** opuścił kanał <#${oldState.channelId}>`).setTimestamp();
+        channel.send({ embeds: [embed] });
     }
+});
 
-    if (interaction.user.id !== YOUR_DISCORD_ID && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-        return interaction.reply({ content: 'Tylko administrator.', ephemeral: true });
-    }
+// --- LIVE PING & STARTUP ---
+client.once('ready', async () => {
+    console.log(`Bot zalogowany jako ${client.user.tag}`);
+    app.listen(PORT, () => { console.log(`Serwer działa na porcie ${PORT}!`); });
 
-    const topic = interaction.channel.topic || '';
-    const parts = topic.split('|');
-    let targetId = parts[0] || 'brak_id';
-    let createdAtStr = 'Nieznana';
-    
-    const createdPart = parts.find(p => p && p.startsWith('CREATED:'));
-    if (createdPart) createdAtStr = createdPart.replace('CREATED:', '');
-
-    if (interaction.customId === 'close_ticket') {
-        if (targetId && targetId !== 'brak_id') {
-            await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
-        }
-        const closedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
-        interaction.channel.setTopic(`${targetId}|CREATED:${createdAtStr}|CLOSED:${closedAtStr}`).catch(() => null);
-
-        const reopenRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
-            new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
-        );
-        await interaction.reply({ content: `🔒 Zgłoszenie zamknięte (${closedAtStr}).`, components: [reopenRow] });
-    }
-
-    if (interaction.customId === 'open_ticket') {
-        if (targetId && targetId !== 'brak_id') {
-            await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: true }).catch(() => null);
-        }
-        const closeRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
-            new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
-        );
-        await interaction.reply({ content: `🔓 Zgłoszenie otwarte dla <@${targetId}>.`, components: [closeRow] });
-    }
-
-    if (interaction.customId === 'archive_ticket') {
-        await interaction.reply('📁 Generuję szczegółowe archiwum...');
-        try {
-            let messages = await interaction.channel.messages.fetch({ limit: 100 });
-            messages = Array.from(messages.values()).reverse();
-            
-            const participantsSet = new Set();
-            messages.forEach(m => {
-                if (!m.author.bot) participantsSet.add(m.author.username);
-            });
-            const participantsList = participantsSet.size > 0 ? Array.from(participantsSet).join(', ') : 'Brak interakcji';
-
-            let closedAtStr = 'Nie zamknięto ręcznie';
-            const closedPart = parts.find(p => p && p.startsWith('CLOSED:'));
-            if (closedPart) {
-                closedAtStr = closedPart.replace('CLOSED:', '');
-            } else if (topic.includes('CLOSED:')) {
-                const match = topic.match(/CLOSED:([^|]+)/);
-                if (match) closedAtStr = match[1];
-            }
-            
-            const archivedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
-
-            let htmlContent = `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Archiwum</title><style>body{background:#313338;color:#dbdee1;font-family:sans-serif;padding:20px}.message{margin-bottom:15px}.author{font-weight:bold;color:#f2f3f5}.content{background:#2b2d31;padding:10px;border-radius:6px;display:inline-block}</style></head><body><h2>Archiwum: ${interaction.channel.name}</h2>`;
-            messages.forEach(m => {
-                htmlContent += `<div class="message"><span class="author">${m.author.username}</span> <span style="font-size:11px;color:#949ba4">${m.createdAt.toLocaleString('pl-PL')}</span><br><div class="content">${m.content || '[Media]'}</div></div>`;
-            });
-            htmlContent += `</body></html>`;
-
-            await TicketArchive.create({
-                channelName: interaction.channel.name,
-                messagesCount: messages.length,
-                participants: Array.from(participantsSet),
-                createdAt: createdAtStr,
-                closedAt: closedAtStr,
-                archivedAt: archivedAtStr,
-                archivedBy: interaction.user.username,
-                htmlContent: htmlContent
-            });
-
-            const embedLog = new EmbedBuilder()
+    try {
+        const statusChannel = client.channels.cache.get(STATUS_CHANNEL_ID);
+        if (statusChannel) {
+            const embed = new EmbedBuilder()
                 .setColor('#024442')
-                .setAuthor({ name: '📁 ARCHIWUM ZGŁOSZENIA' })
-                .setDescription(
-                    `>>> **• Kanał:** \`${interaction.channel.name}\`\n` +
-                    `**• Wiadomości:** \`${messages.length}\`\n` +
-                    `**• Uczestnicy:** \`${participantsList}\`\n` +
-                    `**• Otwarcie:** \`${createdAtStr}\`\n` +
-                    `**• Zamknięcie:** \`${closedAtStr}\`\n` +
-                    `**• Archiwizacja:** \`${archivedAtStr}\`\n` +
-                    `**• Zarchiwizował:** <@${interaction.user.id}>`
-                )
-                .setFooter({ text: 'rapldez.onrender.com • Baza Danych MongoDB' })
-                .setTimestamp();
-
-            const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-            if (logChannel) {
-                await logChannel.send({ embeds: [embedLog] });
-            }
-        } catch (err) {
-            console.log('Błąd archiwizacji:', err);
+                .setAuthor({ name: '🟢 SYSTEM OPERACYJNY ONLINE' })
+                .setDescription(`**Status infrastruktury:** Stabilny\n**Aktualny Ping:** \`${client.ws.ping}ms\``)
+                .setTimestamp()
+                .setFooter({ text: 'rapldez.onrender.com' });
+                
+            const statusMsg = await statusChannel.send({ embeds: [embed] });
+            
+            // Auto-update pingu co 10 minut
+            setInterval(() => {
+                embed.setDescription(`**Status infrastruktury:** Stabilny\n**Aktualny Ping:** \`${client.ws.ping}ms\``).setTimestamp();
+                statusMsg.edit({ embeds: [embed] }).catch(()=>null);
+            }, 10 * 60 * 1000);
         }
-
-        setTimeout(() => { interaction.channel.delete().catch(() => null); }, 4000);
-    }
+    } catch (e) { console.error(e); }
 });
 
 const PORT = process.env.PORT || 3000;
-client.once('ready', () => {
-    console.log(`Bot zalogowany jako ${client.user.tag}`);
-    app.listen(PORT, () => { console.log(`Serwer działa na porcie ${PORT}!`); });
-});
 client.login(BOT_TOKEN);
