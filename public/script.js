@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         // Zwiększone opóźnienia, żeby tekst pisał się i kasował miękko, bez pośpiechu
-        setTimeout(animateTitle, isDeleting ? 440 : 540);
+        setTimeout(animateTitle, isDeleting ? 540 : 540);
     }
     animateTitle();
 
