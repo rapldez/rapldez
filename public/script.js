@@ -102,7 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.authenticated) {
                 isAdminLogged = true;
                 if (statusText) statusText.innerHTML = `<span style="color:#23a559;">Zalogowano: ${data.username}</span>`;
-                if (actionContainer) actionContainer.innerHTML = `<button id="logout-btn" style="background:#f23f42; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Wyloguj</button>`;
+                if (actionContainer) actionContainer.innerHTML = `<button id="logout-btn" style="background:#f23f42; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:11px;">Wyloguj</button>`;
                 
                 document.getElementById('logout-btn')?.addEventListener('click', () => {
                     fetch('/api/logout', { method: 'POST' }).then(() => {
@@ -112,20 +112,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast("Autoryzacja pomyślna!", "success");
             } else {
                 isAdminLogged = false;
-                if (statusText) statusText.innerText = "Brak autoryzacji roota.";
-                if (actionContainer) actionContainer.innerHTML = `<a href="/auth/discord" class="discord-login-btn"><i class="fa-brands fa-discord"></i> Zaloguj</a>`;
+                if (statusText) statusText.innerText = "Tryb gościa";
+                // Mały przycisk "Admin" zamiast wielkiego logo
+                if (actionContainer) actionContainer.innerHTML = `<a href="/auth/discord" class="admin-btn">Admin</a>`;
             }
         }).catch(err => {});
     }
     checkAuthStatus();
 
-    // SPRAWDZANIE PARAMETRÓW URL PO POWROCIE Z DISCORDA
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('login') === 'success') {
-        showToast("Zalogowano pomyślnie przez Discord!", "success");
+        showToast("Zalogowano pomyślnie!", "success");
         window.history.replaceState({}, document.title, window.location.pathname);
     } else if (urlParams.get('error')) {
-        showToast("Błąd logowania przez Discord!", "error");
+        showToast("Błąd logowania!", "error");
         window.history.replaceState({}, document.title, window.location.pathname);
     }
 
@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!discordStatusText) return;
         if (activeActivityStart) {
             let diff = Math.floor((Date.now() - activeActivityStart) / 1000);
-            let h = Math.floor(diff / 3600), m = Math.floor((diff % 3600) / 60), s = diff % 60;
+            let h = Math.floor(diff / 3600), m = Math.floor((diff % 3600) / 60);
             discordStatusText.innerHTML = `${baseStatusHtml} (od ${h > 0 ? h+'h ' : ''}${m}m)`;
         } else {
             discordStatusText.innerHTML = baseStatusHtml;
@@ -280,8 +280,6 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             if (isAdminLogged) {
                 termOutput.innerHTML += `<div style="color: #fbc02d;">Zweryfikowano tożsamość root (OAuth2). Pełny dostęp.</div>`;
-            } else {
-                termOutput.innerHTML += `<div style="color: #f23f42;">Brak sesji administratora. Zaloguj się przyciskiem wyżej przez Discord.</div>`;
             }
         }
         setTimeout(() => termInput.focus(), 100);
@@ -358,7 +356,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Obsługa tagów umiejętności, kontaktu i menu kontekstowego...
     document.querySelectorAll('.skill-tag').forEach(tag => {
         tag.addEventListener('click', (e) => {
             openTerminalClean(false);
@@ -371,8 +368,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const openContactBtn = document.getElementById('open-contact'), closeContactBtn = document.getElementById('close-contact'), contactOverlay = document.getElementById('contact-overlay'), sendContactBtn = document.getElementById('send-contact-btn');
     if(openContactBtn && contactOverlay) {
-        openContactBtn.addEventListener('click', () => contactOverlay.style.opacity = '1');
-        closeContactBtn.addEventListener('click', () => contactOverlay.style.opacity = '0');
+        openContactBtn.addEventListener('click', () => {
+            contactOverlay.style.opacity = '1';
+            contactOverlay.style.pointerEvents = 'auto';
+        });
+        closeContactBtn.addEventListener('click', () => {
+            contactOverlay.style.opacity = '0';
+            contactOverlay.style.pointerEvents = 'none';
+        });
         sendContactBtn.addEventListener('click', () => {
             const nick = document.getElementById('contact-nick').value.trim();
             const subject = document.getElementById('contact-subject').value.trim();
@@ -387,6 +390,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }).then(res => res.json()).then(data => {
                 showToast(data.message || "Wysłano!", "success");
                 contactOverlay.style.opacity = '0';
+                contactOverlay.style.pointerEvents = 'none';
             }).catch(() => showToast("Błąd wysyłania", "error"));
         });
     }
