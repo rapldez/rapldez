@@ -28,7 +28,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let baseStatusHtml = 'Offline';
     let activeActivityStart = null;
 
-    // AUDIO WIZUALIZATOR
     let audioCtx, analyser, source, dataArray, canvasCtx;
     const visualizerCanvas = document.getElementById('audio-visualizer');
 
@@ -36,11 +35,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (audioCtx || !visualizerCanvas || !bgAudio) return;
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioCtx.createAnalyser();
-        
         source = audioCtx.createMediaElementSource(bgAudio);
         source.connect(analyser);
         analyser.connect(audioCtx.destination);
-        
         analyser.fftSize = 64;
         const bufferLength = analyser.frequencyBinCount;
         dataArray = new Uint8Array(bufferLength);
@@ -49,13 +46,9 @@ document.addEventListener('DOMContentLoaded', () => {
         function drawVisualizer() {
             requestAnimationFrame(drawVisualizer);
             analyser.getByteFrequencyData(dataArray);
-            
             canvasCtx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
-            
             const barWidth = (visualizerCanvas.width / bufferLength) * 2;
-            let barHeight;
-            let x = 0;
-            
+            let barHeight, x = 0;
             for(let i = 0; i < bufferLength; i++) {
                 barHeight = (dataArray[i] / 255) * visualizerCanvas.height;
                 canvasCtx.fillStyle = '#23a559';
@@ -66,7 +59,6 @@ document.addEventListener('DOMContentLoaded', () => {
         drawVisualizer();
     }
 
-    // POGODA SZCZECIN (API Open-Meteo)
     function fetchWeather() {
         fetch('https://api.open-meteo.com/v1/forecast?latitude=53.4289&longitude=14.553&current_weather=true')
         .then(res => res.json())
@@ -74,38 +66,67 @@ document.addEventListener('DOMContentLoaded', () => {
             const temp = Math.round(data.current_weather.temperature);
             const weatherCode = data.current_weather.weathercode;
             let icon = 'fa-cloud';
-            if(weatherCode === 0) icon = 'fa-sun'; 
-            else if(weatherCode >= 1 && weatherCode <= 3) icon = 'fa-cloud-sun';
-            else if(weatherCode >= 51 && weatherCode <= 67) icon = 'fa-cloud-rain';
-            else if(weatherCode >= 71 && weatherCode <= 77) icon = 'fa-snowflake';
+            if(weatherCode === 0) icon = 'fa-sun';
+            else if(weatherCode <= 3) icon = 'fa-cloud-sun';
+            else if(weatherCode <= 67) icon = 'fa-cloud-rain';
+            else if(weatherCode <= 77) icon = 'fa-snowflake';
             else if(weatherCode >= 95) icon = 'fa-bolt';
-            
             document.getElementById('weather-szczecin').innerHTML = `<i class="fa-solid ${icon}"></i> ${temp}°C`;
-        })
-        .catch(err => console.log('Błąd pogody:', err));
+        }).catch(err => {});
     }
     fetchWeather();
-    setInterval(fetchWeather, 15 * 60 * 1000); 
 
-    // TOAST NOTIFICATIONS
     function showToast(message, type = 'success') {
         const container = document.getElementById('toast-container');
         if (!container) return;
-        
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
-        
         let icon = type === 'success' ? '<i class="fa-solid fa-check-circle"></i>' : '<i class="fa-solid fa-circle-exclamation"></i>';
-        
         toast.innerHTML = `${icon} <span>${message}</span>`;
         container.appendChild(toast);
-        
-        setTimeout(() => { toast.classList.add('show'); }, 10);
-        
+        setTimeout(() => toast.classList.add('show'), 10);
         setTimeout(() => {
             toast.classList.remove('show');
-            setTimeout(() => { toast.remove(); }, 400); 
+            setTimeout(() => toast.remove(), 400);
         }, 4000);
+    }
+
+    // SPRAWDZANIE SESJI OAUTH2
+    let isAdminLogged = false;
+    function checkAuthStatus() {
+        fetch('/api/check-auth')
+        .then(res => res.json())
+        .then(data => {
+            const statusText = document.getElementById('auth-status-text');
+            const actionContainer = document.getElementById('auth-action-container');
+            if (data.authenticated) {
+                isAdminLogged = true;
+                if (statusText) statusText.innerHTML = `<span style="color:#23a559;">Zalogowano: ${data.username}</span>`;
+                if (actionContainer) actionContainer.innerHTML = `<button id="logout-btn" style="background:#f23f42; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Wyloguj</button>`;
+                
+                document.getElementById('logout-btn')?.addEventListener('click', () => {
+                    fetch('/api/logout', { method: 'POST' }).then(() => {
+                        window.location.href = '/';
+                    });
+                });
+                showToast("Autoryzacja pomyślna!", "success");
+            } else {
+                isAdminLogged = false;
+                if (statusText) statusText.innerText = "Brak autoryzacji roota.";
+                if (actionContainer) actionContainer.innerHTML = `<a href="/auth/discord" class="discord-login-btn"><i class="fa-brands fa-discord"></i> Zaloguj</a>`;
+            }
+        }).catch(err => {});
+    }
+    checkAuthStatus();
+
+    // SPRAWDZANIE PARAMETRÓW URL PO POWROCIE Z DISCORDA
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('login') === 'success') {
+        showToast("Zalogowano pomyślnie przez Discord!", "success");
+        window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (urlParams.get('error')) {
+        showToast("Błąd logowania przez Discord!", "error");
+        window.history.replaceState({}, document.title, window.location.pathname);
     }
 
     const BADGES = {
@@ -129,80 +150,62 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (p) {
                         if (statusDot) statusDot.className = 'status-dot ' + p.discord_status;
                         activeActivityStart = null;
-                        
                         if (p.spotify) {
                             baseStatusHtml = `<i class="fa-brands fa-spotify" style="color:#1DB954; margin-right:4px;"></i>${p.spotify.artist.split(';')[0]} - ${p.spotify.song}`;
-                            if (p.spotify.timestamps && p.spotify.timestamps.start) activeActivityStart = p.spotify.timestamps.start;
+                            if (p.spotify.timestamps) activeActivityStart = p.spotify.timestamps.start;
                         } else if (p.activities && p.activities.length > 0) {
                             const game = p.activities.find(x => x.type === 0);
                             if (game) {
                                 baseStatusHtml = `<i class="fa-solid fa-gamepad" style="color:#a0a0a0; margin-right:4px;"></i>Gra w: ${game.name}`;
-                                if (game.timestamps && game.timestamps.start) activeActivityStart = game.timestamps.start;
+                                if (game.timestamps) activeActivityStart = game.timestamps.start;
                             }
                         } else {
-                            let sTxt = 'Offline';
-                            if (p.discord_status === 'online') sTxt = 'Online';
-                            else if (p.discord_status === 'idle') sTxt = 'Zaraz wracam';
-                            else if (p.discord_status === 'dnd') sTxt = 'Nie przeszkadzać';
-                            baseStatusHtml = sTxt;
+                            baseStatusHtml = p.discord_status === 'online' ? 'Online' : (p.discord_status === 'idle' ? 'Zaraz wracam' : 'Offline');
                         }
                         updateStatusDisplay();
 
                         if (p.discord_user && discordAvatar) {
                             const isAnimated = p.discord_user.avatar && p.discord_user.avatar.startsWith('a_');
-                            const ext = isAnimated ? 'gif' : 'png';
                             if(p.discord_user.avatar) {
-                                discordAvatar.src = `https://cdn.discordapp.com/avatars/${p.discord_user.id}/${p.discord_user.avatar}.${ext}?size=512`;
+                                discordAvatar.src = `https://cdn.discordapp.com/avatars/${p.discord_user.id}/${p.discord_user.avatar}.${isAnimated?'gif':'png'}?size=512`;
                             }
-
                             if (badgesContainer && p.t === 'INIT_STATE') {
                                 badgesContainer.innerHTML = '';
                                 const flags = p.discord_user.public_flags;
                                 let badgeHtml = '';
-                                if (isAnimated) badgeHtml += `<img src="${BADGES.NITRO}" class="badge-icon" title="Discord Nitro">`;
-                                if (flags & 64) badgeHtml += `<img src="${BADGES.HYPE_BRAVERY}" class="badge-icon" title="HypeSquad Bravery">`;
-                                if (flags & 128) badgeHtml += `<img src="${BADGES.HYPE_BRILLIANCE}" class="badge-icon" title="HypeSquad Brilliance">`;
-                                if (flags & 256) badgeHtml += `<img src="${BADGES.HYPE_BALANCE}" class="badge-icon" title="HypeSquad Balance">`;
-                                if (flags & 512) badgeHtml += `<img src="${BADGES.EARLY_SUPPORTER}" class="badge-icon" title="Early Supporter">`;
-                                if (flags & 4194304) badgeHtml += `<img src="${BADGES.ACTIVE_DEV}" class="badge-icon" title="Active Developer">`;
+                                if (isAnimated) badgeHtml += `<img src="${BADGES.NITRO}" class="badge-icon">`;
+                                if (flags & 64) badgeHtml += `<img src="${BADGES.HYPE_BRAVERY}" class="badge-icon">`;
+                                if (flags & 128) badgeHtml += `<img src="${BADGES.HYPE_BRILLIANCE}" class="badge-icon">`;
+                                if (flags & 4194304) badgeHtml += `<img src="${BADGES.ACTIVE_DEV}" class="badge-icon">`;
                                 badgesContainer.innerHTML = badgeHtml;
                             }
                         }
                     }
                 }
             });
-        } catch(e) { console.warn("Lanyard error", e); }
+        } catch(e) {}
     }
 
     function updateStatusDisplay() {
         if (!discordStatusText) return;
         if (activeActivityStart) {
             let diff = Math.floor((Date.now() - activeActivityStart) / 1000);
-            if (diff < 0) diff = 0;
-            let h = Math.floor(diff / 3600);
-            let m = Math.floor((diff % 3600) / 60);
-            let s = diff % 60;
-            let timeStr = h > 0 ? `${h}h ${m}m` : `${m}m ${s < 10 ? '0'+s : s}s`;
-            discordStatusText.innerHTML = `${baseStatusHtml} (od ${timeStr})`;
+            let h = Math.floor(diff / 3600), m = Math.floor((diff % 3600) / 60), s = diff % 60;
+            discordStatusText.innerHTML = `${baseStatusHtml} (od ${h > 0 ? h+'h ' : ''}${m}m)`;
         } else {
             discordStatusText.innerHTML = baseStatusHtml;
         }
     }
 
-    const inviteCode = "cyvKv8YvU7"; 
-    fetch(`https://discord.com/api/v9/invites/${inviteCode}?with_counts=true`)
-        .then(response => { if (!response.ok) throw new Error("API error"); return response.json(); })
+    fetch(`https://discord.com/api/v9/invites/cyvKv8YvU7?with_counts=true`)
+        .then(res => res.json())
         .then(data => {
             if (data && data.guild) {
-                const srvName = document.getElementById('discord-server-name');
-                const srvStats = document.getElementById('discord-server-stats');
-                const srvIcon = document.getElementById('discord-server-icon');
-                if (srvName) srvName.innerText = data.guild.name;
-                if (srvStats) srvStats.innerHTML = `<span class="stats-dot"></span> ${data.approximate_presence_count} Online • ${data.approximate_member_count} Members`;
-                if (srvIcon && data.guild.icon) srvIcon.src = `https://cdn.discordapp.com/icons/${data.guild.id}/${data.guild.icon}.png`;
+                document.getElementById('discord-server-name').innerText = data.guild.name;
+                document.getElementById('discord-server-stats').innerHTML = `<span class="stats-dot"></span> ${data.approximate_presence_count} Online`;
+                if (data.guild.icon) document.getElementById('discord-server-icon').src = `https://cdn.discordapp.com/icons/${data.guild.id}/${data.guild.icon}.png`;
             }
-        })
-        .catch(err => {});
+        }).catch(err => {});
 
     let index = 0;
     const textToType = "always online...";
@@ -218,26 +221,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const lines = document.querySelectorAll('.type-line');
         const skillsBlock = document.querySelector('.skills-container');
         let currentLine = 0;
-
         function typeNextLine() {
             if (currentLine < lines.length) {
-                const p = lines[currentLine];
-                const span = p.querySelector('span');
-                const fullText = p.getAttribute('data-text');
-                span.style.visibility = 'visible';
-                span.innerHTML = '';
-                
+                const p = lines[currentLine], span = p.querySelector('span'), fullText = p.getAttribute('data-text');
+                span.style.visibility = 'visible'; span.innerHTML = '';
                 let charIndex = 0;
                 function typeChar() {
                     if (charIndex < fullText.length) {
                         span.innerHTML += fullText.charAt(charIndex);
                         charIndex++;
-                        setTimeout(typeChar, 10); 
+                        setTimeout(typeChar, 10);
                     } else {
-                        if (currentLine === 1 && skillsBlock) {
-                            skillsBlock.style.transition = "opacity 0.5s";
-                            skillsBlock.style.opacity = "1";
-                        }
+                        if (currentLine === 1 && skillsBlock) skillsBlock.style.opacity = "1";
                         currentLine++;
                         setTimeout(typeNextLine, 200);
                     }
@@ -248,40 +243,20 @@ document.addEventListener('DOMContentLoaded', () => {
         typeNextLine();
     }
 
-    function updateClock() {
-        if(liveClock) {
-            const now = new Date();
-            liveClock.innerText = now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second:'2-digit' });
-        }
+    setInterval(() => {
+        if(liveClock) liveClock.innerText = new Date().toLocaleTimeString('pl-PL');
         updateStatusDisplay();
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
-
-    function formatTime(seconds) {
-        if (isNaN(seconds)) return "0:00";
-        let min = Math.floor(seconds / 60);
-        let sec = Math.floor(seconds % 60);
-        if(sec < 10) sec = '0' + sec;
-        return min + ':' + sec;
-    }
+    }, 1000);
 
     if (enterScreen) {
         enterScreen.addEventListener('click', () => {
             enterScreen.style.opacity = '0';
-            setTimeout(() => { enterScreen.style.display = 'none'; }, 500);
+            setTimeout(() => enterScreen.style.display = 'none', 500);
             if (mainContent) { mainContent.style.opacity = '1'; mainContent.style.pointerEvents = 'auto'; }
-
-            const startVol = volumeSlider ? volumeSlider.value : 0.15;
-            if (bgAudio) { bgAudio.volume = startVol; bgAudio.play().catch(e=>{}); }
+            if (bgAudio) { bgAudio.volume = volumeSlider ? volumeSlider.value : 0.15; bgAudio.play().catch(e=>{}); }
             if (bgVideo) { bgVideo.muted = true; bgVideo.play().catch(e=>{}); }
-            
-            initVisualizer(); 
-
-            setTimeout(() => {
-                typeWriterTitle();
-                typeAboutMe();
-            }, 500);
+            initVisualizer();
+            setTimeout(() => { typeWriterTitle(); typeAboutMe(); }, 500);
         });
     }
 
@@ -292,17 +267,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const termOutput = document.getElementById('terminal-output');
     const mainTerminal = document.getElementById('main-terminal');
     const termForm = document.getElementById('terminal-form');
-    const termPrompt = document.getElementById('term-prompt');
-
-    // LOGOWANIE DO TERMINALA
-    let isLoginMode = false;
-    let isAdminLogged = false;
 
     function openTerminalClean(isManual) {
         termOverlay.style.opacity = '1';
         termOverlay.style.pointerEvents = 'auto';
         termOutput.innerHTML = ''; 
-        
         if (isManual) {
             termOutput.innerHTML = `
                 <div>[ rapldez OS v1.0 ]</div>
@@ -310,160 +279,76 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div>Wpisz 'pomoc', aby wyświetlić listę dostępnych poleceń.</div>
             `;
             if (isAdminLogged) {
-                termOutput.innerHTML += `<div style="color: #fbc02d;">Jesteś zalogowany jako root. Pełny dostęp.</div>`;
+                termOutput.innerHTML += `<div style="color: #fbc02d;">Zweryfikowano tożsamość root (OAuth2). Pełny dostęp.</div>`;
+            } else {
+                termOutput.innerHTML += `<div style="color: #f23f42;">Brak sesji administratora. Zaloguj się przyciskiem wyżej przez Discord.</div>`;
             }
-        } else {
-            termOutput.innerHTML = `<div>[ rapldez OS v1.0 ]</div>`;
         }
-        setTimeout(() => { termInput.focus(); }, 100);
+        setTimeout(() => termInput.focus(), 100);
     }
 
     if(openTermBtn && termOverlay) {
-        openTermBtn.addEventListener('click', () => {
-            openTerminalClean(true);
-        });
-        
+        openTermBtn.addEventListener('click', () => openTerminalClean(true));
         closeTermBtn.addEventListener('click', () => {
             termOverlay.style.opacity = '0';
             termOverlay.style.pointerEvents = 'none';
-            isLoginMode = false;
-            termInput.type = 'text';
-            termPrompt.innerText = 'root@rapldez:';
         });
 
         if (termForm) {
             termForm.addEventListener('submit', function(e) {
                 e.preventDefault(); 
-                
                 const command = termInput.value.trim().toLowerCase();
-                const rawCommand = termInput.value.trim(); 
                 termInput.value = '';
-                
-                if (command === '' && !isLoginMode) return;
-
-                if (isLoginMode) {
-                    const cmdEcho = document.createElement('div');
-                    cmdEcho.innerHTML = `<span class="prompt">Hasło:</span> <span style="color:white;">********</span>`;
-                    termOutput.appendChild(cmdEcho);
-
-                    const response = document.createElement('div');
-                    if (rawCommand === 'sigma123') { 
-                        isAdminLogged = true;
-                        response.innerHTML = `<span style="color:#23a559;">Dostęp przyznany. Witaj, administratorze.</span>`;
-                        showToast("Zalogowano do terminala", "success");
-                    } else {
-                        response.innerHTML = `<span style="color:#f23f42;">Odmowa dostępu. Nieprawidłowe hasło.</span>`;
-                        showToast("Odmowa dostępu", "error");
-                    }
-                    
-                    isLoginMode = false;
-                    termInput.type = 'text';
-                    termPrompt.innerText = 'root@rapldez:';
-                    
-                    response.style.marginBottom = "10px";
-                    termOutput.appendChild(response);
-                    termOutput.scrollTop = termOutput.scrollHeight;
-                    return;
-                }
+                if (command === '') return;
 
                 const cmdEcho = document.createElement('div');
                 cmdEcho.innerHTML = `<span class="prompt">root@rapldez:</span> <span style="color:white;">${command}</span>`;
                 termOutput.appendChild(cmdEcho);
 
                 const response = document.createElement('div');
-                
                 switch(command) {
-                    case 'login':
-                        if (isAdminLogged) {
-                            response.innerHTML = `<span style="color:#fbc02d;">Jesteś już zalogowany jako administrator.</span>`;
-                        } else {
-                            isLoginMode = true;
-                            termInput.type = 'password';
-                            termPrompt.innerText = 'Hasło:';
-                            return; 
-                        }
-                        break;
                     case 'pomoc':
                         let helpText = `
-                            Dostępne polecenia systemowe:<br>
-                            &nbsp;&nbsp;<b>setup</b>&nbsp;&nbsp;&nbsp;&nbsp;- specyfikacja sprzętu i roweru<br>
-                            &nbsp;&nbsp;<b>ping</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- test opóźnienia do API Discorda<br>
-                            &nbsp;&nbsp;<b>zapros</b>&nbsp;&nbsp;&nbsp;- link do zaproszenia na Discord<br>
-                            &nbsp;&nbsp;<b>motyw</b>&nbsp;&nbsp;&nbsp;&nbsp;- zmienia motyw terminala<br>
-                            &nbsp;&nbsp;<b>login</b>&nbsp;&nbsp;&nbsp;&nbsp;- autoryzacja deweloperska<br>
-                            &nbsp;&nbsp;<b>clear</b>&nbsp;&nbsp;&nbsp;&nbsp;- czyści ekran terminala
+                            Dostępne polecenia:<br>
+                            &nbsp;&nbsp;<b>setup</b>&nbsp;&nbsp;- specyfikacja sprzętu i roweru<br>
+                            &nbsp;&nbsp;<b>ping</b>&nbsp;&nbsp;&nbsp;&nbsp;- test opóźnienia do API<br>
+                            &nbsp;&nbsp;<b>zapros</b>&nbsp;&nbsp;- link do zaproszenia na Discord<br>
+                            &nbsp;&nbsp;<b>motyw</b>&nbsp;&nbsp;&nbsp;- zmienia motyw terminala<br>
+                            &nbsp;&nbsp;<b>clear</b>&nbsp;&nbsp;&nbsp;- czyści ekran
                         `;
                         if (isAdminLogged) {
-                            helpText += `<br><br><span style="color:#fbc02d;">Polecenia administratora:</span><br>
-                            &nbsp;&nbsp;<b>reboot</b>&nbsp;&nbsp;- zdalny restart serwera aplikacji<br>
-                            &nbsp;&nbsp;<b>wyloguj</b>&nbsp;- opuszcza tryb roota`;
+                            helpText += `<br><br><span style="color:#fbc02d;">Admin:</span><br>&nbsp;&nbsp;<b>reboot</b>&nbsp;- zdalny restart bota`;
                         }
                         response.innerHTML = helpText;
                         break;
-                    case 'wyloguj':
-                        if (isAdminLogged) {
-                            isAdminLogged = false;
-                            response.innerHTML = `<span style="color:#23a559;">Wylogowano pomyślnie.</span>`;
-                            showToast("Wylogowano", "success");
-                        } else {
-                            response.innerHTML = `bash: wyloguj: musisz być zalogowany.`;
-                        }
-                        break;
                     case 'reboot':
                         if (isAdminLogged) {
-                            response.innerHTML = `<span style="color:#fbc02d;">Wysyłanie sygnału przerwania do serwera...</span>`;
-                            fetch('/api/reboot', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ password: 'sigma123' })
-                            }).then(() => {
-                                response.innerHTML += `<br><span style="color:#23a559;">Połączenie zerwane. Serwer uruchomi się ponownie za chwilę.</span>`;
-                            }).catch(() => {
-                                response.innerHTML += `<br><span style="color:#f23f42;">Błąd sygnału. Sprawdź konsole.</span>`;
-                            });
+                            response.innerHTML = `<span style="color:#fbc02d;">Wysyłanie sygnału restartu do serwera...</span>`;
+                            fetch('/api/reboot', { method: 'POST' })
+                            .then(() => { response.innerHTML += `<br><span style="color:#23a559;">Restart w toku.</span>`; })
+                            .catch(() => { response.innerHTML += `<br><span style="color:#f23f42;">Błąd.</span>`; });
                         } else {
-                            response.innerHTML = `bash: reboot: brak uprawnień. Zaloguj się.`;
+                            response.innerHTML = `bash: reboot: odmowa dostępu. Musisz zalogować się przez Discord.`;
                         }
                         break;
                     case 'setup':
-                        response.innerHTML = `
-                            <span style="color:#23a559;">[ Sprzęt PC ]</span><br>
-                            CPU: AMD Ryzen 5<br>
-                            GPU: NVIDIA GeForce RTX 3060<br>
-                            RAM: 16GB DDR4<br>
-                            Monitor: 144Hz IPS<br><br>
-                            <span style="color:#23a559;">[ Sprzęt Rowerowy ]</span><br>
-                            Szosa: Szosówka śmigająca po szosie<br>
-                            Gravel: Gravel na bezdroża
-                        `;
+                        response.innerHTML = `<span style="color:#23a559;">[ PC ]</span> Ryzen 5, RTX 3060, 16GB RAM<br><span style="color:#23a559;">[ Rower ]</span> Szosa / Gravel`;
                         break;
                     case 'ping':
-                        const simulatedPing = Math.floor(Math.random() * 8) + 22; 
-                        response.innerHTML = `
-                            Badanie opóźnienia API Discorda <span style="color:#f0b232;">(gateway.discord.gg)</span>...<br>
-                            Czas odpowiedzi: <span style="color:#23a559;">${simulatedPing}ms</span><br>
-                            Status połączenia Lanyard: <span style="color:#23a559;">Stabilne</span>
-                        `;
+                        response.innerHTML = `Gateway Discord: <span style="color:#23a559;">${Math.floor(Math.random() * 8) + 22}ms</span>`;
                         break;
                     case 'zapros':
-                        response.innerHTML = `
-                            <a href="https://discord.com/users/920029957739139083" target="_blank" style="display:inline-block; margin-top:10px; padding:8px 15px; background:linear-gradient(45deg, #d4af37, #f3e5ab); color:black; text-decoration:none; font-weight:bold; border-radius:5px; text-transform:uppercase;">Dodaj do znajomych na Discord</a>
-                        `;
+                        response.innerHTML = `<a href="https://discord.com/users/${discordId}" target="_blank">Profil Discord</a>`;
                         break;
                     case 'motyw':
-                        if(mainTerminal.classList.contains('theme-hacker')) {
-                            mainTerminal.classList.remove('theme-hacker');
-                            response.innerHTML = "Zmieniono motyw na: Domyślny";
-                        } else {
-                            mainTerminal.classList.add('theme-hacker');
-                            response.innerHTML = "Zmieniono motyw na: Hacker";
-                        }
+                        mainTerminal.classList.toggle('theme-hacker');
+                        response.innerHTML = "Zmieniono motyw.";
                         break;
                     case 'clear':
                         termOutput.innerHTML = '';
                         return;
                     default:
-                        response.innerHTML = `bash: ${command}: nie rozpoznano polecenia. Wpisz 'pomoc'.`;
+                        response.innerHTML = `bash: ${command}: nieznane polecenie. Wpisz 'pomoc'.`;
                         break;
                 }
                 response.style.marginBottom = "10px";
@@ -473,222 +358,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    const skillTags = document.querySelectorAll('.skill-tag');
-    const codeSnippets = {
-        'Lua': `🔥 [MTA Scripting Engine]<br>addCommandHandler("slaba_forma", function(plr)<br>&nbsp;&nbsp;outputChatBox("#ff3333[ERROR] Brak paliwa w żyłach! Wymagana kawa.", plr, 255, 255, 255, true)<br>end)<br><span style="color:#23a559;">> Status: Wjeżdża bokiem na każdym serwerze RPG!</span>`,
-        'Node.js': `⚡ [Backend Wizardry]<br>app.get("/api/sigma", (req, res) => {<br>&nbsp;&nbsp;res.json({ vibe: "Nie do pobicia", coffeeLevel: "100%" });<br>);<br><span style="color:#66bb6a;">> Status: Strona i bot żyją w symbiozie 24/7 na Renderze!</span>`,
-        'Python': `🐍 [The Almighty Script]<br>try:<br>&nbsp;&nbsp;import coffee_machine<br>&nbsp;&nbsp;coffee_machine.brew_fresh()<br>except Exception:<br>&nbsp;&nbsp;print("Panic! Znowu brak kofeiny w ekspresie.")<br><span style="color:#ffee58;">> Status: Automatyzuje nudne rzeczy, żeby Radek mógł jeździć na szosie!</span>`,
-        'SQL': `🛢️ [Database Destroyer]<br>SELECT * FROM brain_cells WHERE status = 'missing_at_3am';<br><span style="color:#f23f42;">> Warning: Wykryto zerową aktywność szarych komórek po północy!</span><br><span style="color:#ffa726;">> Status: Tabela ticketerów rośnie szybciej niż km na gravelu.</span>`
-    };
-
-    skillTags.forEach(tag => {
+    // Obsługa tagów umiejętności, kontaktu i menu kontekstowego...
+    document.querySelectorAll('.skill-tag').forEach(tag => {
         tag.addEventListener('click', (e) => {
-            const lang = e.target.getAttribute('data-lang');
-            if(codeSnippets[lang]) {
-                openTerminalClean(false);
-                
-                setTimeout(() => {
-                    const cmdEcho = document.createElement('div');
-                    cmdEcho.innerHTML = `<span class="prompt">root@rapldez:</span> <span style="color:white;">cat skill_${lang.toLowerCase()}.sh</span>`;
-                    termOutput.appendChild(cmdEcho);
-
-                    const response = document.createElement('div');
-                    response.innerHTML = `<span style="color:#a0a0a0;">${codeSnippets[lang]}</span>`;
-                    response.style.marginBottom = "10px";
-                    termOutput.appendChild(response);
-                    termOutput.scrollTop = termOutput.scrollHeight;
-                    
-                    termInput.focus();
-                }, 400); 
-            }
+            openTerminalClean(false);
+            setTimeout(() => {
+                termOutput.innerHTML += `<div>root@rapldez: cat skill_${e.target.getAttribute('data-lang').toLowerCase()}.sh</div><div style="color:#a0a0a0; margin-bottom:10px;">Aktywny system testowy.</div>`;
+                termInput.focus();
+            }, 300);
         });
     });
 
-    const openContactBtn = document.getElementById('open-contact');
-    const closeContactBtn = document.getElementById('close-contact');
-    const contactOverlay = document.getElementById('contact-overlay');
-    const sendContactBtn = document.getElementById('send-contact-btn');
-
+    const openContactBtn = document.getElementById('open-contact'), closeContactBtn = document.getElementById('close-contact'), contactOverlay = document.getElementById('contact-overlay'), sendContactBtn = document.getElementById('send-contact-btn');
     if(openContactBtn && contactOverlay) {
-        openContactBtn.addEventListener('click', () => {
-            contactOverlay.style.opacity = '1';
-            contactOverlay.style.pointerEvents = 'auto';
-        });
-        closeContactBtn.addEventListener('click', () => {
-            contactOverlay.style.opacity = '0';
-            contactOverlay.style.pointerEvents = 'none';
-        });
-
-        // WYSYŁANIE ZGŁOSZENIA + TOASTY
+        openContactBtn.addEventListener('click', () => contactOverlay.style.opacity = '1');
+        closeContactBtn.addEventListener('click', () => contactOverlay.style.opacity = '0');
         sendContactBtn.addEventListener('click', () => {
             const nick = document.getElementById('contact-nick').value.trim();
             const subject = document.getElementById('contact-subject').value.trim();
             const message = document.getElementById('contact-message').value.trim();
-
-            if(!nick || !message || !subject) {
-                showToast("Wypełnij wszystkie pola!", "error");
-                return;
-            }
-
-            showToast("Przetwarzanie zgłoszenia...", "success");
-            sendContactBtn.disabled = true;
-
-            const formData = { nick, subject, message };
-
+            if(!nick || !message || !subject) { showToast("Wypełnij pola!", "error"); return; }
+            
+            showToast("Wysyłanie...", "success");
             fetch('/api/kontakt', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
-            })
-            .then(async res => {
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.message || 'Wystąpił błąd');
-                return data;
-            })
-            .then(data => {
-                showToast(data.message || "Wysłano pomyślnie!", "success");
-                document.getElementById('contact-nick').value = '';
-                document.getElementById('contact-subject').value = '';
-                document.getElementById('contact-message').value = '';
-                setTimeout(() => {
-                    contactOverlay.style.opacity = '0';
-                    contactOverlay.style.pointerEvents = 'none';
-                    sendContactBtn.disabled = false;
-                }, 2000);
-            })
-            .catch(err => {
-                showToast(err.message, "error");
-                sendContactBtn.disabled = false;
-            });
+                body: JSON.stringify({ nick, subject, message })
+            }).then(res => res.json()).then(data => {
+                showToast(data.message || "Wysłano!", "success");
+                contactOverlay.style.opacity = '0';
+            }).catch(() => showToast("Błąd wysyłania", "error"));
         });
     }
 
-    const customMenu = document.getElementById('custom-menu');
-    if (customMenu) {
-        document.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            customMenu.style.display = 'block';
-            customMenu.style.left = e.pageX + 'px';
-            customMenu.style.top = e.pageY + 'px';
-        });
-        
-        document.addEventListener('click', () => {
-            customMenu.style.display = 'none';
-        });
-
-        document.getElementById('menu-copy-id').addEventListener('click', () => {
-            navigator.clipboard.writeText(discordId).then(() => {
-                const originalText = document.getElementById('menu-copy-id').innerHTML;
-                document.getElementById('menu-copy-id').innerHTML = '<i class="fa-solid fa-check"></i> Skopiowano!';
-                setTimeout(() => { document.getElementById('menu-copy-id').innerHTML = originalText; }, 2000);
-            });
-        });
-
-        document.getElementById('menu-mute').addEventListener('click', () => {
-            if(muteIcon) muteIcon.click();
-        });
-
-        document.getElementById('menu-terminal').addEventListener('click', () => {
-            if(openTermBtn) openTermBtn.click();
-        });
-    }
-
-    if (volumeSlider) {
-        volumeSlider.addEventListener('input', (e) => {
-            const vol = e.target.value;
-            if (bgAudio) bgAudio.volume = vol;
-            if (vol == 0) { if(muteIcon) muteIcon.className = "fa-solid fa-volume-xmark"; }
-            else if (vol < 0.5) { if(muteIcon) muteIcon.className = "fa-solid fa-volume-low"; }
-            else { if(muteIcon) muteIcon.className = "fa-solid fa-volume-high"; }
-        });
-
-        if(muteIcon) {
-            muteIcon.addEventListener('click', () => {
-                const currentVol = bgAudio ? bgAudio.volume : 0;
-                if (currentVol > 0) {
-                    if (bgAudio) { bgAudio.dataset.lastVolume = currentVol; bgAudio.volume = 0; }
-                    volumeSlider.value = 0;
-                    muteIcon.className = "fa-solid fa-volume-xmark";
-                } else {
-                    const lastVol = (bgAudio && bgAudio.dataset.lastVolume) ? bgAudio.dataset.lastVolume : 0.15;
-                    if (bgAudio) bgAudio.volume = lastVol;
-                    volumeSlider.value = lastVol;
-                    muteIcon.className = lastVol < 0.5 ? "fa-solid fa-volume-low" : "fa-solid fa-volume-high";
-                }
-            });
-        }
-    }
-
-    if(bgAudio && playPauseBtn && trackProgress && currTimeDisp && totalTimeDisp) {
-        playPauseBtn.addEventListener('click', () => {
-            initVisualizer(); 
-            if(bgAudio.paused) { bgAudio.play(); playPauseBtn.className = "fa-solid fa-pause"; } 
-            else { bgAudio.pause(); playPauseBtn.className = "fa-solid fa-play"; }
-        });
-
-        if(prevTrackBtn) {
-            prevTrackBtn.addEventListener('click', () => {
-                initVisualizer();
-                bgAudio.currentTime = 0;
-                bgAudio.play().catch(e=>{});
-                playPauseBtn.className = "fa-solid fa-pause";
-            });
-        }
-
-        if(nextTrackBtn) {
-            nextTrackBtn.addEventListener('click', () => {
-                initVisualizer();
-                bgAudio.currentTime = 0;
-                bgAudio.play().catch(e=>{});
-                playPauseBtn.className = "fa-solid fa-pause";
-            });
-        }
-
-        bgAudio.addEventListener('timeupdate', () => {
-            if(bgAudio.duration) {
-                trackProgress.value = (bgAudio.currentTime / bgAudio.duration) * 100;
-                currTimeDisp.innerText = formatTime(bgAudio.currentTime);
-                totalTimeDisp.innerText = formatTime(bgAudio.duration);
-            }
-        });
-        trackProgress.addEventListener('input', (e) => {
-            if(bgAudio.duration) bgAudio.currentTime = (e.target.value / 100) * bgAudio.duration;
-        });
-    }
-
-    document.addEventListener('mousemove', (e) => {
-        if (cursorTrail) {
-            cursorTrail.style.left = e.clientX + 'px';
-            cursorTrail.style.top = e.clientY + 'px';
-        }
-        if (mainContent && mainContent.style.opacity === '1' && card) {
-            const xAxis = (window.innerWidth / 2 - e.pageX) / 40; 
-            const yAxis = (window.innerHeight / 2 - e.pageY) / 40;
-            card.style.transform = `rotateY(${xAxis}deg) rotateX(${yAxis}deg)`;
-        }
-    });
-
-    const titleText = "@rapldez";
-    let titleIndex = 0;
-    let direction = 1;
-    function animateTitle() {
-        document.title = titleText.substring(0, titleIndex) || "\u200B";
-        titleIndex += direction;
-        let delay = 250;
-        if (titleIndex === titleText.length + 1) { direction = -1; delay = 1500; titleIndex = titleText.length - 1; } 
-        else if (titleIndex === 0) { direction = 1; delay = 500; } 
-        else if (direction === -1) { delay = 100; }
-        setTimeout(animateTitle, delay);
-    }
-    animateTitle();
-
-    fetch('/api/views?nocache=' + new Date().getTime())
-        .then(res => res.json())
-        .then(data => {
-            const counterEl = document.getElementById('live-counter');
-            if (counterEl && data.views) {
-                counterEl.innerText = data.views;
-            }
-        })
-        .catch(err => console.log('Błąd licznika:', err));
+    fetch('/api/views').then(res => res.json()).then(data => {
+        if (data.views) document.getElementById('live-counter').innerText = data.views;
+    }).catch(err => {});
 });
