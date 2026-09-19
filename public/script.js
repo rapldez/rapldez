@@ -377,7 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             contactStatus.style.color = "#23a559";
-            contactStatus.innerText = "Sprawdzanie obecności na serwerze i wysyłanie...";
+            contactStatus.innerText = "Wysyłanie zgłoszenia...";
             sendContactBtn.disabled = true;
 
             const formData = { nick, subject, message };
@@ -531,7 +531,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     animateTitle();
 
-    // Do adresu licznika doczepiony unikalny ciąg znaków (wymusza pobranie z serwera, omija cache)
     fetch('/api/views?nocache=' + new Date().getTime())
         .then(res => res.json())
         .then(data => {
