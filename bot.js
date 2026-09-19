@@ -198,6 +198,7 @@ app.post('/api/kontakt', async (req, res) => {
         const channelName = `zgłoszenie-${nextNumber}`;
         
         const createdAtStr = formatDatePL(new Date());
+        // Zapisujemy w topicu: ID_UZYTKOWNIKA | DATA_OTWARCIA | DATA_ZAMKNIECIA
         const topicData = `${member ? member.id : 'brak_id'}\vert{}${createdAtStr}|Brak`;
         
         const newChannel = await guild.channels.create({
@@ -526,12 +527,18 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.customId === 'open_ticket') {
         await interaction.deferUpdate();
+        
+        // Przywrócenie uprawnień dla zapisanego w topicu użytkownika
         if (targetId && targetId !== 'brak_id') {
             await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true }).catch(() => null);
         }
         
         const ticketNumber = interaction.channel.name.replace(/[^0-9]/g, '') || '1';
-        await interaction.channel.setName(`zgłoszenie-${ticketNumber}`).catch(() => null);
+        
+        // Zmiana nazwy z małym opóźnieniem zapobiegającym błędom limitu Discorda
+        setTimeout(async () => {
+            await interaction.channel.setName(`zgłoszenie-${ticketNumber}`).catch(() => null);
+        }, 1000);
 
         const closeRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
