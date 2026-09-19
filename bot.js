@@ -13,7 +13,6 @@ const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Serwer działa na porcie ${PORT}!`);
 });
-});
 
 // Podpięcie osobnego panelu zarządzania i terminala z pliku panel.js
 const panelRouter = require('./panel');
