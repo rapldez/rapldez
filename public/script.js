@@ -309,6 +309,60 @@ document.addEventListener('DOMContentLoaded', () => {
     const mainTerminal = document.getElementById('main-terminal');
     const termForm = document.getElementById('terminal-form');
 
+    // --- NOWE: HISTORIA KOMEND I DŹWIĘKI KLAWIATURY ---
+    const commandHistory = [];
+    let historyIndex = -1;
+
+    const keyAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playMechanicalSound() {
+        if (keyAudioCtx.state === 'suspended') keyAudioCtx.resume();
+        const osc = keyAudioCtx.createOscillator();
+        const gainNode = keyAudioCtx.createGain();
+        const filter = keyAudioCtx.createBiquadFilter();
+
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(120 + Math.random() * 20, keyAudioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, keyAudioCtx.currentTime + 0.03);
+
+        filter.type = 'bandpass';
+        filter.frequency.value = 1200 + Math.random() * 300;
+
+        gainNode.gain.setValueAtTime(0.08, keyAudioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, keyAudioCtx.currentTime + 0.03);
+
+        osc.connect(filter);
+        filter.connect(gainNode);
+        gainNode.connect(keyAudioCtx.destination);
+
+        osc.start();
+        osc.stop(keyAudioCtx.currentTime + 0.04);
+    }
+
+    if (termInput) {
+        termInput.addEventListener('keydown', (e) => {
+            if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter') {
+                playMechanicalSound();
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    termInput.value = commandHistory[historyIndex];
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    termInput.value = commandHistory[historyIndex];
+                } else if (historyIndex === commandHistory.length - 1) {
+                    historyIndex++;
+                    termInput.value = '';
+                }
+            }
+        });
+    }
+    // ------------------------------------------------
+
     function openTerminalClean(isManual) {
         termOverlay.style.opacity = '1';
         termOverlay.style.pointerEvents = 'auto';
@@ -337,6 +391,15 @@ document.addEventListener('DOMContentLoaded', () => {
             termForm.addEventListener('submit', function(e) {
                 e.preventDefault(); 
                 const command = termInput.value.trim().toLowerCase();
+                
+                // Zapisywanie komendy do historii
+                if (command !== '') {
+                    if (commandHistory[commandHistory.length - 1] !== command) {
+                        commandHistory.push(command);
+                    }
+                    historyIndex = commandHistory.length;
+                }
+
                 termInput.value = '';
                 if (command === '') return;
 
