@@ -37,7 +37,7 @@
             padding: 20px;
             border-radius: 12px;
             width: 96%;
-            max-width: 900px;
+            max-width: 950px;
             max-height: 92vh;
             overflow-y: auto;
             box-shadow: 0 10px 30px rgba(0,0,0,0.8);
@@ -55,7 +55,6 @@
         .builder-input:focus { border-color: #5865F2; }
         .builder-label { font-size: 11px; color: #949ba4; font-weight: 600; text-transform: uppercase; margin-top: 4px; }
         
-        /* Symulator podglądu discorda na żywo */
         .discord-preview-box { background: #313338; border-radius: 8px; padding: 14px; font-family: 'gg sans', sans-serif; font-size: 14px; color: #dbdee1; position: relative; }
         .discord-embed-card { background: #2b2d31; border-radius: 4px; border-left: 4px solid #024442; padding: 12px; display: flex; gap: 12px; margin-top: 6px; word-break: break-word; }
         .discord-embed-content { flex-grow: 1; display: flex; flex-direction: column; gap: 6px; }
@@ -115,12 +114,20 @@
         </div>
     </div>
 
-    <!-- ZAAWANSOWANY KREATOR EMBEDÓW Z PRZYCISKAMI I PODGLĄDEM -->
+    <!-- ZAAWANSOWANY KREATOR Z SZABLONAMI I JSON -->
     <div id="embed-builder-overlay">
         <div class="contact-window">
-            <div class="contact-header" style="display:flex; justify-content:space-between; margin-bottom:15px; color:#fff; font-weight:bold; align-items:center;">
-                <span><i class="fa-solid fa-wand-magic-sparkles" style="color: #024442;"></i> Zaawansowany Kreator Embedów & Przycisków</span>
-                <i class="fa-solid fa-xmark" onclick="closeEmbedBuilder()" style="cursor:pointer; font-size: 18px;"></i>
+            <div class="contact-header" style="display:flex; justify-content:space-between; margin-bottom:15px; color:#fff; font-weight:bold; align-items:center; flex-wrap: wrap; gap: 10px;">
+                <span><i class="fa-solid fa-wand-magic-sparkles" style="color: #024442;"></i> Kreator Embedów (Szablony & JSON)</span>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <select id="embed-preset-select" class="builder-input" style="padding: 4px 8px; font-size: 11px; width: 150px;" onchange="loadPreset(this.value)">
+                        <option value="">-- Wybierz szablon --</option>
+                    </select>
+                    <button onclick="savePresetPrompt()" style="background:#2b2d31; color:#fff; border:1px solid #383a40; padding:5px 8px; border-radius:4px; font-size:11px; cursor:pointer;"><i class="fa-solid fa-floppy-disk"></i> Zapisz</button>
+                    <button onclick="exportJson()" style="background:#2b2d31; color:#fff; border:1px solid #383a40; padding:5px 8px; border-radius:4px; font-size:11px; cursor:pointer;"><i class="fa-solid fa-code"></i> Eksport JSON</button>
+                    <button onclick="importJsonPrompt()" style="background:#2b2d31; color:#fff; border:1px solid #383a40; padding:5px 8px; border-radius:4px; font-size:11px; cursor:pointer;"><i class="fa-solid fa-file-import"></i> Import JSON</button>
+                    <i class="fa-solid fa-xmark" onclick="closeEmbedBuilder()" style="cursor:pointer; font-size: 18px; margin-left: 5px;"></i>
+                </div>
             </div>
 
             <div class="builder-grid">
@@ -203,7 +210,7 @@
                         </div>
                     </div>
 
-                    <!-- Przyciski (Komponenty) -->
+                    <!-- Przyciski -->
                     <div class="builder-section">
                         <div class="builder-section-header" onclick="toggleBuilderSection(this)">
                             <span><i class="fa-solid fa-square-poll-horizontal"></i> Przyciski (Komponenty)</span>
@@ -216,7 +223,7 @@
                     </div>
                 </div>
 
-                <!-- PRAWA STRONA: PODGLĄD NA ŻYWO (LIVE MOCKUP) -->
+                <!-- PRAWA STRONA: PODGLĄD NA ŻYWO -->
                 <div style="display: flex; flex-direction: column; gap: 10px;">
                     <span class="builder-label" style="color: #fff;"><i class="fa-solid fa-eye"></i> Podgląd na żywo (Discord Mockup)</span>
                     <div class="discord-preview-box">
@@ -230,7 +237,6 @@
                                 </div>
                                 <div id="preview-content-text" style="margin-top: 4px; white-space: pre-wrap; font-size: 13px;"></div>
                                 
-                                <!-- Karta Embedu -->
                                 <div class="discord-embed-card" id="preview-embed-card">
                                     <div class="discord-embed-content">
                                         <div id="preview-author" style="font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px;"></div>
@@ -353,11 +359,12 @@
 
     <div id="toast-container" class="toast-container"></div>
 
-    <!-- SKRYPTY OBSŁUGUJĄCE KREATOR Z PRZYCISKAMI I PODGLĄDEM -->
+    <!-- SKRYPTY OBSŁUGUJĄCE KREATOR, SZABLONY I JSON -->
     <script>
         function openEmbedBuilder() {
             document.getElementById('embed-builder-overlay').style.opacity = '1';
             document.getElementById('embed-builder-overlay').style.pointerEvents = 'auto';
+            loadPresetsList();
             updatePreview();
         }
 
@@ -378,21 +385,21 @@
             }
         }
 
-        function addButtonField() {
+        function addButtonField(btnData = null) {
             const container = document.getElementById('buttons-container');
             const div = document.createElement('div');
             div.className = 'button-row-item';
             div.style.cssText = 'display:flex; gap:6px; align-items:center; background:#111214; padding:6px; border-radius:6px; border:1px solid #383a40;';
             div.innerHTML = `
-                <input type="text" placeholder="Tekst przycisku" class="builder-input btn-label" style="flex:1;" oninput="updatePreview()">
+                <input type="text" placeholder="Tekst przycisku" class="builder-input btn-label" style="flex:1;" value="${btnData ? btnData.label : ''}" oninput="updatePreview()">
                 <select class="builder-input btn-style" style="width:90px;" oninput="updatePreview()">
-                    <option value="PRIMARY">Blurple</option>
-                    <option value="SECONDARY">Gray</option>
-                    <option value="SUCCESS">Green</option>
-                    <option value="DANGER">Red</option>
-                    <option value="LINK">Link</option>
+                    <option value="PRIMARY" ${btnData && btnData.style==='PRIMARY'?'selected':''}>Blurple</option>
+                    <option value="SECONDARY" ${btnData && btnData.style==='SECONDARY'?'selected':''}>Gray</option>
+                    <option value="SUCCESS" ${btnData && btnData.style==='SUCCESS'?'selected':''}>Green</option>
+                    <option value="DANGER" ${btnData && btnData.style==='DANGER'?'selected':''}>Red</option>
+                    <option value="LINK" ${btnData && btnData.style==='LINK'?'selected':''}>Link</option>
                 </select>
-                <input type="text" placeholder="Custom ID / URL" class="builder-input btn-value" style="flex:1;">
+                <input type="text" placeholder="Custom ID / URL" class="builder-input btn-value" style="flex:1;" value="${btnData ? btnData.value : ''}">
                 <i class="fa-solid fa-trash" style="color:#f23f42; cursor:pointer; padding:4px;" onclick="this.parentElement.remove(); updatePreview();"></i>
             `;
             container.appendChild(div);
@@ -459,21 +466,7 @@
             });
         }
 
-        async function sendEmbed() {
-            const channelId = document.getElementById('embed-channel').value.trim();
-            const content = document.getElementById('embed-content').value.trim();
-            const authorName = document.getElementById('embed-author-name').value.trim();
-            const authorUrl = document.getElementById('embed-author-url').value.trim();
-            const authorIcon = document.getElementById('embed-author-icon').value.trim();
-            const title = document.getElementById('embed-title').value.trim();
-            const desc = document.getElementById('embed-desc').value.trim();
-            const color = document.getElementById('embed-color-text').value.trim() || '#024442';
-            const image = document.getElementById('embed-image').value.trim();
-            const thumbnail = document.getElementById('embed-thumbnail').value.trim();
-            const footer = document.getElementById('embed-footer').value.trim();
-            const footerIcon = document.getElementById('embed-footer-icon').value.trim();
-            const timestamp = document.getElementById('embed-timestamp').checked;
-
+        function collectData() {
             const buttons = [];
             document.querySelectorAll('.button-row-item').forEach(row => {
                 buttons.push({
@@ -482,9 +475,28 @@
                     value: row.querySelector('.btn-value').value.trim()
                 });
             });
+            return {
+                channelId: document.getElementById('embed-channel').value.trim(),
+                content: document.getElementById('embed-content').value.trim(),
+                authorName: document.getElementById('embed-author-name').value.trim(),
+                authorUrl: document.getElementById('embed-author-url').value.trim(),
+                authorIcon: document.getElementById('embed-author-icon').value.trim(),
+                title: document.getElementById('embed-title').value.trim(),
+                description: document.getElementById('embed-desc').value.trim(),
+                color: document.getElementById('embed-color-text').value.trim() || '#024442',
+                image: document.getElementById('embed-image').value.trim(),
+                thumbnail: document.getElementById('embed-thumbnail').value.trim(),
+                footer: document.getElementById('embed-footer').value.trim(),
+                footerIcon: document.getElementById('embed-footer-icon').value.trim(),
+                timestamp: document.getElementById('embed-timestamp').checked,
+                buttons
+            };
+        }
 
+        async function sendEmbed() {
+            const data = collectData();
             const status = document.getElementById('embed-status');
-            if (!channelId) { status.style.color = '#f23f42'; status.innerText = 'Podaj ID kanału!'; return; }
+            if (!data.channelId) { status.style.color = '#f23f42'; status.innerText = 'Podaj ID kanału!'; return; }
 
             status.innerText = 'Wysyłanie...';
             status.style.color = '#23a559';
@@ -493,18 +505,98 @@
                 const res = await fetch('/api/send-embed', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        channelId, content, authorName, authorUrl, authorIcon,
-                        title, description: desc, color, image, thumbnail,
-                        footer, footerIcon, timestamp, buttons
-                    })
+                    body: JSON.stringify(data)
                 });
-                const data = await res.json();
-                if (data.success) {
+                const result = await res.json();
+                if (result.success) {
                     status.innerText = '✅ Wysłano na serwer!';
                     setTimeout(() => { closeEmbedBuilder(); status.innerText = ''; }, 1500);
-                } else { status.style.color = '#f23f42'; status.innerText = data.error || 'Błąd.'; }
+                } else { status.style.color = '#f23f42'; status.innerText = result.error || 'Błąd.'; }
             } catch (e) { status.style.color = '#f23f42'; status.innerText = 'Błąd z backendem.'; }
+        }
+
+        async function savePresetPrompt() {
+            const name = prompt("Podaj nazwę dla tego szablonu:");
+            if(!name) return;
+            const data = collectData();
+            data.name = name;
+            await fetch('/api/embed-presets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+            loadPresetsList();
+            alert('Szablon zapisany w bazie!');
+        }
+
+        async function loadPresetsList() {
+            try {
+                const res = await fetch('/api/embed-presets');
+                const presets = await res.json();
+                const select = document.getElementById('embed-preset-select');
+                select.innerHTML = '<option value="">-- Wybierz szablon --</option>';
+                presets.forEach(p => {
+                    select.innerHTML += `<option value="${p._id}">${p.name}</option>`;
+                });
+            } catch(e) {}
+        }
+
+        async function loadPreset(id) {
+            if(!id) return;
+            const res = await fetch(`/api/embed-presets/${id}`);
+            const p = await res.json();
+            if(p) {
+                document.getElementById('embed-content').value = p.content || '';
+                document.getElementById('embed-author-name').value = p.authorName || '';
+                document.getElementById('embed-author-url').value = p.authorUrl || '';
+                document.getElementById('embed-author-icon').value = p.authorIcon || '';
+                document.getElementById('embed-title').value = p.title || '';
+                document.getElementById('embed-desc').value = p.description || '';
+                document.getElementById('embed-color-text').value = p.color || '#024442';
+                document.getElementById('embed-color-picker').value = p.color || '#024442';
+                document.getElementById('embed-image').value = p.image || '';
+                document.getElementById('embed-thumbnail').value = p.thumbnail || '';
+                document.getElementById('embed-footer').value = p.footer || '';
+                document.getElementById('embed-footer-icon').value = p.footerIcon || '';
+                document.getElementById('embed-timestamp').checked = p.timestamp !== false;
+                
+                document.getElementById('buttons-container').innerHTML = '';
+                if(p.buttons && Array.isArray(p.buttons)) {
+                    p.buttons.forEach(b => addButtonField(b));
+                }
+                updatePreview();
+            }
+        }
+
+        function exportJson() {
+            const data = collectData();
+            navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+            alert('Kod JSON embedu został skopiowany do schowka!');
+        }
+
+        function importJsonPrompt() {
+            const jsonStr = prompt("Wklej tutaj kod JSON embedu:");
+            if(!jsonStr) return;
+            try {
+                const p = JSON.parse(jsonStr);
+                document.getElementById('embed-channel').value = p.channelId || '';
+                document.getElementById('embed-content').value = p.content || '';
+                document.getElementById('embed-author-name').value = p.authorName || '';
+                document.getElementById('embed-author-url').value = p.authorUrl || '';
+                document.getElementById('embed-author-icon').value = p.authorIcon || '';
+                document.getElementById('embed-title').value = p.title || '';
+                document.getElementById('embed-desc').value = p.description || '';
+                document.getElementById('embed-color-text').value = p.color || '#024442';
+                document.getElementById('embed-color-picker').value = p.color || '#024442';
+                document.getElementById('embed-image').value = p.image || '';
+                document.getElementById('embed-thumbnail').value = p.thumbnail || '';
+                document.getElementById('embed-footer').value = p.footer || '';
+                document.getElementById('embed-footer-icon').value = p.footerIcon || '';
+                document.getElementById('embed-timestamp').checked = p.timestamp !== false;
+
+                document.getElementById('buttons-container').innerHTML = '';
+                if(p.buttons && Array.isArray(p.buttons)) {
+                    p.buttons.forEach(b => addButtonField(b));
+                }
+                updatePreview();
+                alert('Zaimportowano pomyślnie!');
+            } catch(e) { alert('Błąd: Niepoprawny format JSON!'); }
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
