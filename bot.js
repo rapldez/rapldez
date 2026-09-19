@@ -8,29 +8,22 @@ const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilde
 
 const app = express();
 
-// --- START SERWERA DLA RENDERA ---
+// Odpalamy serwer WWW od razu, żeby Render nie gubił portu
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Serwer działa na porcie ${PORT}!`);
 });
-
-// --- PRZECHWYTYWANIE LOGÓW DO PANELU ---
-let liveLogs = [];
-const originalConsoleLog = console.log;
-console.log = function(...args) {
-    const text = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' ');
-    liveLogs.unshift(`[${new Date().toLocaleTimeString('pl-PL')}]${text}`);
-    if (liveLogs.length > 150) liveLogs.pop();
-    originalConsoleLog.apply(console, args);
-};
 
 // --- SPRAWDZANIE ZMIENNYCH ŚRODOWISKOWYCH (.env) ---
 const requiredEnv = ['BOT_TOKEN', 'MONGO_URI', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI'];
 const missingEnv = requiredEnv.filter(envName => !process.env[envName]);
 
 if (missingEnv.length > 0) {
-    console.error('❌ BŁĄD KRYTYCZNY: Brakuje zmiennych środowiskowych:');
+    console.error('============================================================');
+    console.error('❌ BŁĄD KRYTYCZNY: Brakuje następujących zmiennych środowiskowych:');
     missingEnv.forEach(env => console.error(`   - ${env}`));
+    console.error('Uzupełnij je w pliku .env lub w panelu Render przed startem bota!');
+    console.error('============================================================');
     process.exit(1);
 }
 
@@ -38,6 +31,7 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
 app.use(session({
     secret: 'rapldez_super_secret_key_997',
     resave: false,
@@ -61,141 +55,8 @@ const LOG_CHANNEL_ID = '1550753070726512730';
 const TERMINAL_LOG_CHANNEL = '1550789490518528010';
 const STATUS_CHANNEL_ID = '1550797478021038161';
 const FULL_LOGS_CHANNEL_ID = '1550791675486408754';
+
 const MAIN_COLOR = '#024442';
-
-// --- INICJALIZACJA KLIENTA BOTA ---
-const client = new Client({ 
-    intents: [
-        GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildBans,
-        GatewayIntentBits.GuildInvites, GatewayIntentBits.GuildEmojisAndStickers, GatewayIntentBits.GuildWebhooks,
-        GatewayIntentBits.GuildScheduledEvents, GatewayIntentBits.AutoModerationConfiguration, 
-        GatewayIntentBits.AutoModerationExecution, GatewayIntentBits.GuildModeration
-    ] 
-});
-
-// =========================================================
-// PANEL WWW I KREATOR EMBEDÓW BEZPOŚREDNIO W PLIKU BOTA
-// =========================================================
-app.get('/panel', (req, res) => {
-    let channelOptions = '';
-    if (client.isReady()) {
-        client.guilds.cache.forEach(guild => {
-            guild.channels.cache.forEach(channel => {
-                if (channel.type === 0) { // Tylko kanały tekstowe
-                    channelOptions += `<option value="${channel.id}">${guild.name} / #${channel.name}</option>`;
-                }
-            });
-        });
-    }
-
-    res.send(`
-        <!DOCTYPE html>
-        <html lang="pl">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Centrum Dowodzenia - rapldez</title>
-            <style>
-                :root { --bg-main: #121214; --bg-card: #18181b; --border-color: #27272a; --accent: #5865F2; --text-main: #f4f4f5; --text-muted: #a1a1aa; --terminal-bg: #09090b; --terminal-text: #22c55e; }
-                body { background-color: var(--bg-main); color: var(--text-main); font-family: 'Inter', sans-serif; margin: 0; padding: 15px; }
-                header { display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); border: 1px solid var(--border-color); padding: 15px 20px; border-radius: 12px; margin-bottom: 20px; }
-                h1 { color: var(--text-main); margin: 0; font-size: 18px; font-weight: 600; }
-                .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
-                .card { background: var(--bg-card); border: 1px solid var(--border-color); padding: 20px; border-radius: 12px; }
-                .card h3 { margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; font-size: 16px; }
-                .form-group { margin-bottom: 12px; }
-                label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
-                input, textarea, select { width: 100%; background: var(--terminal-bg); border: 1px solid var(--border-color); color: #fff; padding: 10px; border-radius: 8px; box-sizing: border-box; font-size: 13px; }
-                textarea { resize: vertical; height: 80px; }
-                .discord-embed-preview { background: #2b2d31; border-left: 4px solid #5865F2; padding: 12px; border-radius: 4px; margin-top: 15px; font-size: 13px; }
-                .embed-title { font-weight: bold; margin-bottom: 5px; }
-                .embed-desc { color: #dcddde; white-space: pre-wrap; word-break: break-all; }
-                .btn { background: var(--accent); color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 10px; }
-                .btn-success { background: #23a55a; }
-                .terminal-container { grid-column: 1 / -1; }
-                .terminal { background: var(--terminal-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; height: 250px; overflow-y: auto; font-family: monospace; font-size: 12px; color: var(--terminal-text); line-height: 1.5; }
-                .terminal div { margin-bottom: 4px; white-space: pre-wrap; word-break: break-all; }
-            </style>
-        </head>
-        <body>
-            <header>
-                <h1>🛡️ Centrum Dowodzenia Botem</h1>
-                <button class="btn" style="width: auto; margin: 0; padding: 6px 12px;" onclick="location.reload()">Odśwież Panel</button>
-            </header>
-            
-            <div class="grid">
-                <div class="card">
-                    <h3>Kreator Embedów</h3>
-                    <form action="/send-embed" method="POST">
-                        <div class="form-group">
-                            <label>Wybierz kanał docelowy</label>
-                            <select name="channelId">
-                                ${channelOptions || '<option>Brak kanałów (poczekaj na połączenie bota)</option>'}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Tytuł embeda</label>
-                            <input type="text" name="title" id="embedTitleInput" placeholder="Wpisz tytuł..." oninput="updatePreview()">
-                        </div>
-                        <div class="form-group">
-                            <label>Treść wiadomości</label>
-                            <textarea name="description" id="embedDescInput" placeholder="Wpisz treść..." oninput="updatePreview()"></textarea>
-                        </div>
-                        
-                        <label>Podgląd:</label>
-                        <div class="discord-embed-preview">
-                            <div class="embed-title" id="prevTitle">Twój tytuł...</div>
-                            <div class="embed-desc" id="prevDesc">Tutaj pojawi się treść wiadomości...</div>
-                        </div>
-
-                        <button type="submit" class="btn btn-success">🚀 Wyślij na Discorda</button>
-                    </form>
-                </div>
-
-                <div class="card terminal-container">
-                    <h3>Terminal / Logi Serwera na Żywo</h3>
-                    <div class="terminal" id="terminal-box">
-                        ${liveLogs.length > 0 ? liveLogs.map(log => `<div>${log}</div>`).join('') : '<div>Oczekiwanie na logi...</div>'}
-                    </div>
-                </div>
-            </div>
-
-            <script>
-                const term = document.getElementById('terminal-box');
-                term.scrollTop = term.scrollHeight;
-
-                function updatePreview() {
-                    document.getElementById('prevTitle').innerText = document.getElementById('embedTitleInput').value || 'Twój tytuł...';
-                    document.getElementById('prevDesc').innerText = document.getElementById('embedDescInput').value || 'Tutaj pojawi się treść wiadomości...';
-                }
-            </script>
-        </body>
-        </html>
-    `);
-});
-
-app.post('/send-embed', express.urlencoded({ extended: true }), async (req, res) => {
-    const { channelId, title, description } = req.body;
-    try {
-        const channel = await client.channels.fetch(channelId);
-        if (channel && channel.isTextBased()) {
-            await channel.send({
-                embeds: [{
-                    color: 0x5865F2,
-                    title: title || undefined,
-                    description: description || undefined,
-                    timestamp: new Date().toISOString()
-                }]
-            });
-            console.log(`[PANEL] Wysłano embed na kanał ID: ${channelId}`);
-        }
-    } catch (err) {
-        console.error('[BŁĄD PANELU] Nie udało się wysłać embeda:', err);
-    }
-    res.redirect('/panel');
-});
-// =========================================================
 
 // --- FUNKCJE POMOCNICZE ---
 const createLogEmbed = (title, desc) => new EmbedBuilder().setColor(MAIN_COLOR).setAuthor({ name: title }).setDescription(desc).setTimestamp();
@@ -229,7 +90,7 @@ async function isVPN(ip) {
     } catch (e) { return false; }
 }
 
-// --- MONGODB ---
+// --- MONGODB SCHEMAS ---
 const counterSchema = new mongoose.Schema({ id: { type: String, default: 'views' }, count: { type: Number, default: 0 } });
 const Counter = mongoose.model('Counter', counterSchema);
 
@@ -249,14 +110,23 @@ const embedPresetSchema = new mongoose.Schema({ name: String, content: String, a
 const EmbedPreset = mongoose.model('EmbedPreset', embedPresetSchema);
 
 const giveawaySchema = new mongoose.Schema({
-    messageId: String, channelId: String, prize: String, endsAt: Number,
-    ended: { type: Boolean, default: false }, participants: [String]
+    messageId: String,
+    channelId: String,
+    prize: String,
+    endsAt: Number,
+    ended: { type: Boolean, default: false },
+    participants: [String]
 });
 const Giveaway = mongoose.model('Giveaway', giveawaySchema);
 
 const pollSchema = new mongoose.Schema({
-    messageId: String, channelId: String, question: String, options: [String],
-    endsAt: Number, ended: { type: Boolean, default: false }, votes: { type: Map, of: Number, default: {} }
+    messageId: String,
+    channelId: String,
+    question: String,
+    options: [String],
+    endsAt: Number,
+    ended: { type: Boolean, default: false },
+    votes: { type: Map, of: Number, default: {} }
 });
 const Poll = mongoose.model('Poll', pollSchema);
 
@@ -266,6 +136,16 @@ if (MONGO_URI) {
         .then(() => { dbStatus = '🟢 Połączono (Stabilna)'; console.log('✅ Połączono z MongoDB!'); })
         .catch(err => { dbStatus = '🔴 Błąd połączenia'; console.error(err); });
 }
+
+const client = new Client({ 
+    intents: [
+        GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildBans,
+        GatewayIntentBits.GuildInvites, GatewayIntentBits.GuildEmojisAndStickers, GatewayIntentBits.GuildWebhooks,
+        GatewayIntentBits.GuildScheduledEvents, GatewayIntentBits.AutoModerationConfiguration, 
+        GatewayIntentBits.AutoModerationExecution, GatewayIntentBits.GuildModeration
+    ] 
+});
 
 const guildInvitesCache = new Map();
 
@@ -279,7 +159,7 @@ const sendCrashLog = async (error) => {
 process.on('uncaughtException', async (err) => { console.error(err); await sendCrashLog(err); });
 process.on('unhandledRejection', async (reason) => { console.error(reason); await sendCrashLog(reason); });
 
-// --- AUTH DISCORD ---
+// --- ENDPOINTY STRONY I API ---
 app.get('/auth/discord', (req, res) => res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`));
 
 app.get('/auth/discord/callback', async (req, res) => {
@@ -404,6 +284,207 @@ app.post('/api/kontakt', async (req, res) => {
     }
 });
 
+// TERMINAL API
+app.post('/api/terminal', async (req, res) => {
+    const cmd = req.body.command ? req.body.command.trim() : '';
+    if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ output: 'Odmowa dostępu.' });
+
+    logToTerminalDiscord('⌨️ Wykonano polecenie WWW', `**Komenda:** \`${cmd || '[Puste]'}\``);
+    const cmdArgs = cmd.split(' ');
+    const cmdLower = cmdArgs[0].toLowerCase();
+
+    if (cmdLower === 'sysinfo') return res.json({ output: `Uptime: ${Math.floor(process.uptime())}s | RAM: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB \vert{} Ping:${client.ws.ping}ms` });
+    
+    if (cmdLower === 'db' && cmdArgs[1] === 'stats') {
+        const tickCount = await TicketArchive.countDocuments();
+        const views = await Counter.findOne({ id: 'views' });
+        return res.json({ output: `Statystyki bazy:\n- Zarchiwizowane tickety: ${tickCount}\n- Odsłony strony: ${views?.count || 0}` });
+    }
+    
+    if (cmdLower === 'paste' && cmdArgs.length > 1) {
+        const shortId = Math.random().toString(36).substring(2, 8);
+        await Paste.create({ shortId, content: cmd.substring(6), createdAt: formatDatePL(new Date()) });
+        return res.json({ output: `Zapisano kod. Link: https://rapldez.onrender.com/p/${shortId}` });
+    }
+    
+    if (cmdLower === 'bot' && cmdArgs[1] === 'status') {
+        client.user.setActivity(cmd.substring(11));
+        return res.json({ output: `Status zmieniony na: "${cmd.substring(11)}"` });
+    }
+
+    if (cmdLower === 'search' && cmdArgs.length > 1) {
+        const query = cmdArgs.slice(1).join(' ');
+        const results = await TicketArchive.find({ htmlContent: { $regex: query,$options: 'i' } });
+        if (results.length === 0) return res.json({ output: `Brak wyników w bazie dla słowa: "${query}"` });
+        const names = results.map(r => r.channelName).join(', ');
+        return res.json({ output: `Znaleziono słowo "${query}" w ticketach (${results.length}):\n${names}` });
+    }
+
+    if (cmdLower === 'giveaway') {
+        const channelId = cmdArgs[1];
+        const minutes = parseInt(cmdArgs[2]);
+        const prize = cmdArgs.slice(3).join(' ');
+
+        if (!channelId || isNaN(minutes) || !prize) {
+            return res.json({ output: 'Użycie: giveaway [ID_KANAŁU] [CZAS_W_MINUTACH] [NAGRODA]' });
+        }
+
+        const channel = client.channels.cache.get(channelId);
+        if (!channel) return res.json({ output: 'Błąd: Nie znaleziono kanału o podanym ID.' });
+
+        const endsAt = Date.now() + (minutes * 60 * 1000);
+        const unixTime = Math.floor(endsAt / 1000);
+
+        const embed = new EmbedBuilder()
+            .setColor(MAIN_COLOR)
+            .setAuthor({ name: '🎉 ROZPOCZĘTO KONKURS (GIVEAWAY)' })
+            .setTitle(prize)
+            .setDescription(`>>> **• Nagroda:** \`${prize}\`\n**• Zakończenie:** <t:${unixTime}:R>\n**• Dokładna data:** <t:${unixTime}:f>\n**• Uczestnicy:** \`0\`\n\nKliknij przycisk poniżej, aby dołączyć!`)
+            .setFooter({ text: 'rapldez OS • Konkursy' })
+            .setTimestamp();
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('join_giveaway').setLabel('Dołącz do losowania').setStyle(ButtonStyle.Success).setEmoji('🎉')
+        );
+
+        const gMsg = await channel.send({ embeds: [embed], components: [row] });
+        await Giveaway.create({
+            messageId: gMsg.id,
+            channelId: channel.id,
+            prize: prize,
+            endsAt: endsAt,
+            participants: []
+        });
+
+        return res.json({ output: `Wystartowano giveaway na kanale <#${channelId}> na ${minutes} minut. Nagroda: ${prize}` });
+    }
+
+    return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo], giveaway [kanał] [minuty] [nagroda]` });
+});
+
+// POBIERANIE WIADOMOŚCI DO EDYCJI
+app.get('/api/fetch-message/:channelId/:messageId', async (req, res) => {
+    if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ error: 'Brak uprawnień roota.' });
+    try {
+        const channel = client.channels.cache.get(req.params.channelId);
+        if (!channel) return res.status(404).json({ error: 'Nie znaleziono kanału.' });
+        const msg = await channel.messages.fetch(req.params.messageId);
+        if (!msg) return res.status(404).json({ error: 'Nie znaleziono wiadomości.' });
+
+        const embed = msg.embeds[0] || {};
+        const data = {
+            content: msg.content || '',
+            authorName: embed.author?.name || '',
+            authorUrl: embed.author?.url || '',
+            authorIcon: embed.author?.iconURL || '',
+            title: embed.title || '',
+            description: embed.description || '',
+            color: embed.color ? `#${embed.color.toString(16).padStart(6, '0')}` : '#024442',
+            image: embed.image?.url || '',
+            thumbnail: embed.thumbnail?.url || '',
+            footer: embed.footer?.text || '',
+            footerIcon: embed.footer?.iconURL || '',
+            timestamp: !!embed.timestamp,
+            buttons: []
+        };
+
+        if (msg.components && msg.components.length > 0 && msg.components[0].components) {
+            msg.components[0].components.forEach(btn => {
+                let style = 'PRIMARY';
+                if (btn.style === 2) style = 'SECONDARY';
+                if (btn.style === 3) style = 'SUCCESS';
+                if (btn.style === 4) style = 'DANGER';
+                if (btn.style === 5) style = 'LINK';
+                data.buttons.push({
+                    label: btn.label || '',
+                    style: style,
+                    value: btn.url || btn.customId || ''
+                });
+            });
+        }
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: 'Nie można pobrać wiadomości (sprawdź ID).' });
+    }
+});
+
+// ENDPOINT WYSYŁANIA I EDYCJI EMBEDÓW
+app.post('/api/send-embed', async (req, res) => {
+    if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ error: 'Brak uprawnień roota.' });
+    
+    const { channelId, messageId, content, authorName, authorUrl, authorIcon, title, description, color, image, thumbnail, footer, footerIcon, timestamp, buttons } = req.body;
+    if (!channelId || (!description && !title && !content)) return res.status(400).json({ error: 'Wymagane ID kanału oraz treść embedu.' });
+
+    try {
+        const targetChannel = client.channels.cache.get(channelId);
+        if (!targetChannel) return res.status(404).json({ error: 'Nie znaleziono kanału o tym ID.' });
+
+        const embed = new EmbedBuilder();
+        if (color) embed.setColor(color);
+        if (title) embed.setTitle(title);
+        if (description) embed.setDescription(description.replace(/\\n/g, '\n'));
+        
+        if (authorName) {
+            embed.setAuthor({
+                name: authorName,
+                ...(authorUrl && { url: authorUrl }),
+                ...(authorIcon && { iconURL: authorIcon })
+            });
+        }
+
+        if (image) embed.setImage(image);
+        if (thumbnail) embed.setThumbnail(thumbnail);
+        if (footer || footerIcon) {
+            embed.setFooter({ text: footer || '', ...(footerIcon && { iconURL: footerIcon }) });
+        }
+        if (timestamp) embed.setTimestamp();
+
+        const payload = {};
+        if (content) payload.content = content.replace(/\\n/g, '\n');
+        if (description || title || authorName || image || thumbnail || footer) payload.embeds = [embed];
+
+        if (buttons && buttons.length > 0) {
+            const row = new ActionRowBuilder();
+            buttons.forEach((btn, idx) => {
+                let style = ButtonStyle.Primary;
+                if (btn.style === 'SECONDARY') style = ButtonStyle.Secondary;
+                if (btn.style === 'SUCCESS') style = ButtonStyle.Success;
+                if (btn.style === 'DANGER') style = ButtonStyle.Danger;
+                if (btn.style === 'LINK') style = ButtonStyle.Link;
+
+                const bBuilder = new ButtonBuilder()
+                    .setLabel(btn.label || `Przycisk ${idx+1}`)
+                    .setStyle(style);
+
+                if (style === ButtonStyle.Link) {
+                    bBuilder.setURL(btn.value || 'https://discord.com');
+                } else {
+                    bBuilder.setCustomId(`custom_btn_${Date.now()}_${idx}`);
+                }
+                row.addComponents(bBuilder);
+            });
+            payload.components = [row];
+        } else {
+            payload.components = [];
+        }
+
+        if (messageId) {
+            const msgToEdit = await targetChannel.messages.fetch(messageId);
+            if (!msgToEdit) return res.status(404).json({ error: 'Nie znaleziono wiadomości o tym ID na podanym kanale.' });
+            await msgToEdit.edit(payload);
+            logToTerminalDiscord('📝 Edytor Embedów', `Użytkownik **${req.session.user.username}** zaktualizował embed na kanale <#${channelId}>.`);
+            res.json({ success: true, message: 'Wiadomość zaktualizowana pomyślnie!' });
+        } else {
+            await targetChannel.send(payload);
+            logToTerminalDiscord('📝 Kreator Embedów', `Użytkownik **${req.session.user.username}** wysłał embed na kanał <#${channelId}>.`);
+            res.json({ success: true, message: 'Wiadomość z embedem wysłana!' });
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Błąd podczas wysyłania/edycji.' });
+    }
+});
+
 app.get('/p/:id', async (req, res) => {
     const paste = await Paste.findOne({ shortId: req.params.id });
     if (!paste) return res.send('Brak kodu o tym ID.');
@@ -411,6 +492,7 @@ app.get('/p/:id', async (req, res) => {
     res.send(paste.content);
 });
 
+// Map do śledzenia wiadomości (Anty-Spam)
 const userSpamMap = new Map();
 const SPAM_LIMIT = 5; 
 const SPAM_TIME = 4000; 
@@ -426,6 +508,7 @@ client.on('messageCreate', async message => {
         const userId = message.author.id;
         const msgContent = message.content.toLowerCase();
 
+        // 1. DETEKTOR SCAM-LINKÓW
         const scamRegex = /(discorcl|dlscord|discord-nitro|discord-app|nitro-gift|steamcommunitly|stearmcommunity|steam-nitro|free-nitro|discord\.xyz|discord-gift|gift-nitro)/i;
         const isRealDiscord = msgContent.includes('discord.com') || msgContent.includes('discord.gg');
         
@@ -440,6 +523,7 @@ client.on('messageCreate', async message => {
             return;
         }
 
+        // 2. TARCZA MASOWYCH WZMIANEK
         const mentionCount = message.mentions.users.size + message.mentions.roles.size;
         const hasEveryone = message.content.includes('@everyone') || message.content.includes('@here');
         
@@ -454,6 +538,7 @@ client.on('messageCreate', async message => {
             return;
         }
 
+        // 3. ORYGINALNY SYSTEM ANTY-SPAM
         const currentTime = Date.now();
         if (!userSpamMap.has(userId)) {
             userSpamMap.set(userId, { timestamps: [], lastMessage: msgContent, duplicateCount: 1 });
@@ -496,6 +581,7 @@ client.on('messageCreate', async message => {
         }
     }
 
+    // --- KOMENDA: KLONOWANIE UPRAWNIEŃ KANAŁÓW (!sync-perms) ---
     if (message.content.startsWith('!sync-perms') && message.author.id === YOUR_DISCORD_ID) {
         const mentionedChannels = Array.from(message.mentions.channels.values());
         const sourceChannel = mentionedChannels[0];
@@ -537,6 +623,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
+    // --- KOMENDA: INTERAKTYWNA ANKIETA Z CZASEM (!poll [minuty] | [pytanie] | [opcja1] | [opcja2]) ---
     if (message.content.startsWith('!poll') && message.author.id === YOUR_DISCORD_ID) {
         const argsText = message.content.substring(5).trim();
         const parts = argsText.split('|').map(p => p.trim()).filter(Boolean);
@@ -551,7 +638,7 @@ client.on('messageCreate', async message => {
         }
 
         const question = parts[1];
-        const options = parts.slice(2, 7);
+        const options = parts.slice(2, 7); // Maksymalnie 5 opcji
 
         if (options.length < 2) {
             return message.reply('❌ Ankieta musi mieć przynajmniej 2 opcje.');
@@ -1075,8 +1162,14 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId.startsWith('poll_vote_')) {
         try {
             const poll = await Poll.findOne({ messageId: interaction.message.id });
-            if (!poll) return interaction.reply({ content: '❌ Ta ankieta już nie istnieje w bazie.', ephemeral: true });
-            if (poll.ended || Date.now() >= poll.endsAt) return interaction.reply({ content: '❌ Czas na głosowanie w tej ankiecie dobiegł końca!', ephemeral: true });
+
+            if (!poll) {
+                return interaction.reply({ content: '❌ Ta ankieta już nie istnieje w bazie.', ephemeral: true });
+            }
+
+            if (poll.ended || Date.now() >= poll.endsAt) {
+                return interaction.reply({ content: '❌ Czas na głosowanie w tej ankiecie dobiegł końca!', ephemeral: true });
+            }
 
             const optionIndex = parseInt(interaction.customId.split('_')[2]);
             const userId = interaction.user.id;
@@ -1131,7 +1224,9 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId === 'join_giveaway') {
         try {
             const g = await Giveaway.findOne({ messageId: interaction.message.id, ended: false });
-            if (!g) return interaction.reply({ content: '❌ Ten konkurs już się zakończył.', ephemeral: true });
+            if (!g) {
+                return interaction.reply({ content: '❌ Ten konkurs już się zakończył.', ephemeral: true });
+            }
 
             let left = false;
             if (g.participants.includes(interaction.user.id)) {
@@ -1156,6 +1251,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.update({ embeds: [updatedEmbed] });
             return interaction.followUp({ content: left ? '👋 Opuściłeś losowanie.' : '🎉 Zostałeś pomyślnie dodany do losowania! Powodzenia.', ephemeral: true });
         } catch (e) {
+            console.error(e);
             return interaction.reply({ content: 'Błąd podczas zapisywania.', ephemeral: true });
         }
     }
@@ -1200,6 +1296,11 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.update({ embeds: [getStatusEmbed()], components: [statusRow] });
         }
+        return;
+    }
+
+    if (interaction.customId.startsWith('custom_btn_')) {
+        await interaction.reply({ content: 'Przycisk interaktywny wygenerowany z panelu.', ephemeral: true });
         return;
     }
 
@@ -1252,6 +1353,7 @@ client.on('interactionCreate', async interaction => {
         }
         
         const ticketNumber = interaction.channel.name.replace(/[^0-9]/g, '') || '1';
+        
         setTimeout(async () => {
             await interaction.channel.setName(`zgłoszenie-${ticketNumber}`).catch(() => null);
         }, 1000);
@@ -1306,7 +1408,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// --- ANTY-PHISHING ---
+// --- SYSTEM: AUTO-BLOKADA PODEJRZANYCH DOMEN (ANTY-PHISHING) ---
 const BLOCKED_DOMAINS = [
     'steam-gift.com', 
     'discord-nitro.ru', 
@@ -1316,6 +1418,7 @@ const BLOCKED_DOMAINS = [
 
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
+
     const contentLower = message.content.toLowerCase();
     const isSuspicious = BLOCKED_DOMAINS.some(domain => contentLower.includes(domain));
 
@@ -1325,18 +1428,19 @@ client.on('messageCreate', async message => {
             const warningMsg = await message.channel.send(`⚠️ ${message.author}, Twoja wiadomość została usunięta, ponieważ zawierała potencjalnie niebezpieczną lub zablokowaną domenę!`);
             setTimeout(() => warningMsg.delete().catch(() => {}), 5000);
         } catch (error) {
-            console.error('Błąd anty-phishing:', error);
+            console.error('Błąd podczas usuwania podejrzanego linku:', error);
         }
     }
 });
 
-// --- GHOST PING DETEKTOR ---
+// --- SYSTEM: GHOST PING DETEKTOR ---
 client.on('messageDelete', async message => {
     if (message.author?.bot || !message.guild || message.mentions.users.size === 0) return;
+
     const mentionedUsers = message.mentions.users.map(user => `<@${user.id}>`).join(', ');
 
     const logEmbed = {
-        color: 0xff0000,
+        color: 0xff0000, 
         title: '🚨 Wykryto usunięty Ghost Ping!',
         description: 'Ktoś oznaczył użytkownika, a następnie błyskawicznie skasował wiadomość.',
         fields: [
@@ -1344,14 +1448,17 @@ client.on('messageDelete', async message => {
             { name: '🎯 Oznaczone osoby', value: `> ${mentionedUsers}`, inline: false },
             { name: '💬 Skasowana treść', value: `> ${message.content || '*[Brak tekstu / sam załącznik]*'}`, inline: false }
         ],
-        footer: { text: `ID użytkownika: ${message.author.id}` },
+        footer: {
+            text: `ID użytkownika: ${message.author.id}`
+        },
         timestamp: new Date().toISOString()
     };
 
-    const LOG_CHANNEL_ID_GHOST = '1550913229893410817'; 
-    const logChannel = message.guild.channels.cache.get(LOG_CHANNEL_ID_GHOST);
+    const LOG_CHANNEL_ID = '1550913229893410817'; 
+    const logChannel = message.guild.channels.cache.get(LOG_CHANNEL_ID);
+
     if (logChannel) {
-        logChannel.send({ embeds: [logEmbed] }).catch(err => console.error(err));
+        logChannel.send({ embeds: [logEmbed] }).catch(err => console.error('Błąd wysyłania logu ghost ping:', err));
     }
 });
 
