@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -50,10 +50,34 @@ app.post('/api/kontakt', async (req, res) => {
     try {
         const guild = client.guilds.cache.get(SERVER_ID);
         if (!guild) {
-            return res.status(500).json({ message: 'Wystąpił błąd po stronie serwera.' });
+            return res.status(500).json({ message: 'Błąd: Bot nie widzi serwera.' });
         }
 
-        // Kanał widoczny tylko dla administracji/dla Ciebie
+        // Miękkie szukanie użytkownika
+        const inputClean = nick.toLowerCase().trim();
+        let member = null;
+
+        try {
+            const searchResults = await guild.members.fetch({ query: inputClean, limit: 10 });
+            member = searchResults.find(m => 
+                m.user.username.toLowerCase() === inputClean || 
+                (m.user.globalName && m.user.globalName.toLowerCase() === inputClean) ||
+                (m.nickname && m.nickname.toLowerCase() === inputClean)
+            );
+
+            if (!member) {
+                const allMembers = await guild.members.fetch(); 
+                member = allMembers.find(m => 
+                    m.user.username.toLowerCase() === inputClean || 
+                    (m.user.globalName && m.user.globalName.toLowerCase() === inputClean) ||
+                    (m.nickname && m.nickname.toLowerCase() === inputClean)
+                );
+            }
+        } catch (e) {
+            console.log("Błąd szukania użytkownika:", e);
+        }
+
+        // Uprawnienia: domyślnie nikt nie widzi kanału (poza administracją serwera)
         const permissionOverwrites = [
             {
                 id: guild.id,
@@ -61,70 +85,132 @@ app.post('/api/kontakt', async (req, res) => {
             }
         ];
 
-        // Bezpieczna nazwa kanału bez znaków specjalnych
+        // Jeśli bot go znalazł, dostaje uprawnienia (żeby pisać z Tobą w tickecie)
+        if (member) {
+            permissionOverwrites.push({
+                id: member.id,
+                allow: [
+                    PermissionsBitField.Flags.ViewChannel, 
+                    PermissionsBitField.Flags.SendMessages, 
+                    PermissionsBitField.Flags.ReadMessageHistory
+                ],
+            });
+        }
+
+        // Bezpieczna nazwa kanału i zapisanie ID w temacie (topic) do użycia w przyciskach
         const safeNick = nick.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 16) || 'nieznany';
         const channelName = `ticket-${safeNick}`;
+        const topicId = member ? member.id : 'brak_id';
         
         const newChannel = await guild.channels.create({
             name: channelName,
             type: ChannelType.GuildText,
             parent: CATEGORY_ID,
+            topic: topicId, // Ukryte zapamiętanie ID
             permissionOverwrites: permissionOverwrites
         });
 
+        const pingText = member ? `<@${member.id}>` : 'Brak na serwerze (Nie można oznaczyć)';
+        const dateStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+
         const embed = new EmbedBuilder()
             .setColor('#111214')
-            .setAuthor({ name: '🎫 RAPLDEZ • ZGŁOSZENIE ZE STRONY WWW' })
+            .setAuthor({ name: '🎫 RAPLDEZ • ZGŁOSZENIE ZE STRONY' })
             .setDescription(`
 **• 👤 × Informacje o nadawcy:**
 \`—\` **× Nick ze strony:** \`${nick}\`
+\`—\` **× Ping:** ${pingText}
 
 **• 📩 × Informacje o zgłoszeniu:**
 \`—\` **× Temat:** \`${subject}\`
+\`—\` **× Data i godzina:** \`${dateStr}\`
 \`—\` **× Treść:**
 \`\`\`text\n${message}\n\`\`\`
             `)
-            .setFooter({ text: 'rapldez OS • System zgłoszeń' })
-            .setTimestamp();
+            .setFooter({ text: 'rapldez OS • System zgłoszeń' });
 
-        // Dodanie przycisku do zamknięcia
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId('close_ticket')
-                    .setLabel('Zamknij Ticket')
-                    .setStyle(ButtonStyle.Danger)
-                    .setEmoji('🔒')
-            );
+        // Komplet przycisków startowych
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
+            new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj').setStyle(ButtonStyle.Danger).setEmoji('📁')
+        );
 
-        // Oznaczenie Ciebie bezpośrednio, abyś wiedział, że formularz przyszedł
+        // Ping na głównego admina + ładny embed
         await newChannel.send({ 
             content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie!`, 
             embeds: [embed],
             components: [row]
         });
         
-        res.status(200).json({ message: 'Zgłoszenie utworzone pomyślnie!' });
+        res.status(200).json({ message: 'Zgłoszenie wysłane! Jeśli jesteś na moim serwerze Discord, dostałeś powiadomienie.' });
 
     } catch (error) {
         console.error("Błąd przy tworzeniu ticketa:", error);
-        res.status(500).json({ message: 'Wystąpił błąd podczas tworzenia kanału.' });
+        res.status(500).json({ message: 'Wystąpił błąd podczas komunikacji z Discordem.' });
     }
 });
 
-// Obsługa przycisku zamykania ticketa
+// LOGIKA PRZYCISKÓW W TICKETACH
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
+    // Uprawnienia - tylko Ty (lub admini) mogą klikać przyciski
+    if (interaction.user.id !== YOUR_DISCORD_ID && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+        return interaction.reply({ content: 'Tylko administrator może zarządzać zgłoszeniem.', ephemeral: true });
+    }
+
+    const targetId = interaction.channel.topic; 
+
+    // ZAMKNIJ TICKET (Odbiera dostęp graczowi)
     if (interaction.customId === 'close_ticket') {
-        if (interaction.user.id !== YOUR_DISCORD_ID && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-            return interaction.reply({ content: 'Tylko administrator może zamknąć ten kanał.', ephemeral: true });
+        if (targetId && targetId !== 'brak_id') {
+            await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
+        }
+        
+        const reopenRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
+            new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
+        );
+        
+        await interaction.reply({ content: '🔒 Zgłoszenie zamknięte. Użytkownik stracił dostęp do kanału.', components: [reopenRow] });
+    }
+
+    // OTWÓRZ TICKET (Przywraca dostęp graczowi)
+    if (interaction.customId === 'open_ticket') {
+        if (targetId && targetId !== 'brak_id') {
+            await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: true }).catch(() => null);
+        }
+        
+        const closeRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary).setEmoji('🔒'),
+            new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
+        );
+        
+        await interaction.reply({ content: `🔓 Zgłoszenie otwarte. Użytkownik <@${targetId}> znów widzi kanał.`, components: [closeRow] });
+    }
+
+    // ARCHIWIZUJ TICKET (Zapisuje log do TXT, wysyła Ci na PW i usuwa kanał)
+    if (interaction.customId === 'archive_ticket') {
+        await interaction.reply('📁 Generuję archiwum... Kanał zostanie usunięty za 5 sekund.');
+        
+        try {
+            // Pobieranie historii kanału
+            let messages = await interaction.channel.messages.fetch({ limit: 100 });
+            let logText = messages.reverse().map(m => `[${m.createdAt.toLocaleString('pl-PL')}] ${m.author.username}: ${m.content}`).join('\n');
+            
+            if (logText.trim() === '') logText = 'Brak wiadomości tekstowych w tickecie.';
+
+            const attachment = new AttachmentBuilder(Buffer.from(logText, 'utf-8'), { name: `archiwum-${interaction.channel.name}.txt` });
+            
+            // Wysłanie PW do Ciebie
+            const adminUser = await client.users.fetch(YOUR_DISCORD_ID);
+            await adminUser.send({ content: `📁 Zarchiwizowano zgłoszenie: **${interaction.channel.name}**`, files: [attachment] });
+        } catch (err) {
+            console.log('Błąd archiwizacji (mogło zablokować PW):', err);
         }
 
-        await interaction.reply({ content: 'Kanał zostanie usunięty za 5 sekund...' });
-        
         setTimeout(() => {
-            interaction.channel.delete().catch(err => console.error("Nie mogłem usunąć kanału:", err));
+            interaction.channel.delete().catch(() => null);
         }, 5000);
     }
 });
