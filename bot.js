@@ -409,8 +409,63 @@ app.get('/p/:id', async (req, res) => {
     res.send(paste.content);
 });
 
+// Map do śledzenia wiadomości (Anty-Spam)
+const userSpamMap = new Map();
+const SPAM_LIMIT = 5; 
+const SPAM_TIME = 4000; 
+const SPAM_DUPLICATES = 4; 
+const TIMEOUT_DURATION = 5 * 60 * 1000; 
+
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
+
+    // --- SYSTEM ANTY-SPAM ---
+    if (message.author.id !== YOUR_DISCORD_ID && !message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        const userId = message.author.id;
+        const currentTime = Date.now();
+        const msgContent = message.content.toLowerCase();
+
+        if (!userSpamMap.has(userId)) {
+            userSpamMap.set(userId, { timestamps: [], lastMessage: msgContent, duplicateCount: 1 });
+        }
+
+        const userData = userSpamMap.get(userId);
+        userData.timestamps.push(currentTime);
+        userData.timestamps = userData.timestamps.filter(time => currentTime - time < SPAM_TIME);
+
+        if (msgContent === userData.lastMessage && msgContent !== '') {
+            userData.duplicateCount++;
+        } else {
+            userData.lastMessage = msgContent;
+            userData.duplicateCount = 1;
+        }
+
+        if (userData.timestamps.length >= SPAM_LIMIT || userData.duplicateCount >= SPAM_DUPLICATES) {
+            try {
+                if (message.member && message.member.moderatable) {
+                    await message.member.timeout(TIMEOUT_DURATION, 'System Anty-Spam: Zbyt szybkie pisanie / powielanie tekstu');
+                    
+                    const fetched = await message.channel.messages.fetch({ limit: 15 });
+                    const userMessagesToDelete = fetched.filter(m => m.author.id === userId);
+                    await message.channel.bulkDelete(userMessagesToDelete, true).catch(() => {});
+
+                    const alertEmbed = new EmbedBuilder()
+                        .setColor('#f23f42')
+                        .setAuthor({ name: '🛡️ SYSTEM OBRONNY OS' })
+                        .setDescription(`>>> **Zagrożenie:** Wykryto atak spamem.\n**Cel:** <@${userId}>\n**Akcja:** Tymczasowe odcięcie dostępu (5 minut).\n**Status:** Środowisko zabezpieczone.`);
+                        
+                    const alertMsg = await message.channel.send({ embeds: [alertEmbed] });
+                    setTimeout(() => alertMsg.delete().catch(()=>null), 6000);
+
+                    sendServerLog('🛡️ Aktywacja Anty-Spamu', `**Zagrożenie usunięte.**\n**Użytkownik:** <@${userId}>\n**Kanał:** <#${message.channel.id}>\n**Kara:** Timeout na 5 minut\n**Powód:** Spam.`);
+                }
+            } catch (err) { console.error('Błąd anty-spamu:', err); }
+            
+            userSpamMap.delete(userId);
+            return; 
+        }
+    }
+    // --- KONIEC ANTY-SPAMU ---
 
     if (message.content.startsWith('!clear') && message.author.id === YOUR_DISCORD_ID) {
         const amount = parseInt(message.content.split(' ')[1]);
