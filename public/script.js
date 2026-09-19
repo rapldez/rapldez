@@ -243,10 +243,9 @@ document.addEventListener('DOMContentLoaded', () => {
             termOverlay.style.pointerEvents = 'none';
         });
 
-        // Nasłuchiwanie na event "submit" formularza, to działa w 100% na telefonach
         if (termForm) {
             termForm.addEventListener('submit', function(e) {
-                e.preventDefault(); // Zatrzymuje przeładowanie strony
+                e.preventDefault(); 
                 
                 const command = termInput.value.trim().toLowerCase();
                 termInput.value = '';
@@ -526,4 +525,14 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(animateTitle, delay);
     }
     animateTitle();
+
+    fetch('/api/views')
+        .then(res => res.json())
+        .then(data => {
+            const counterEl = document.getElementById('live-counter');
+            if (counterEl && data.views) {
+                counterEl.innerText = data.views;
+            }
+        })
+        .catch(err => console.log('Błąd licznika:', err));
 });
