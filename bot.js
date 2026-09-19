@@ -21,7 +21,7 @@ const client = new Client({
 });
 
 // --- TUTAJ WKLEJ SWOJE DANE ---
-const BOT_TOKEN = 'MTU1MDcwMjM1NjE3NjQ0NTU2MA.GDL5dX.fsdVmvhgrjWJ_k6mcS-7zfLUM2IiZIIMwlcEO4';
+const BOT_TOKEN = process.env.BOT_TOKEN;
 const SERVER_ID = '1516145205215232050'; 
 const CATEGORY_ID = '1550704110691422318'; 
 
