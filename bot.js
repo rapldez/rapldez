@@ -7,10 +7,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Udostępnianie plików strony (HTML, CSS, JS, obrazy) z folderu public
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Konfiguracja bota
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const SERVER_ID = '1516145205215232050'; 
+const CATEGORY_ID = '1550704110691422318'; 
+
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds, 
@@ -20,12 +22,6 @@ const client = new Client({
     ] 
 });
 
-// --- TUTAJ WKLEJ SWOJE DANE ---
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const SERVER_ID = '1516145205215232050'; 
-const CATEGORY_ID = '1550704110691422318'; 
-
-// Endpoint do obsługi formularza kontaktowego ze strony
 app.post('/api/kontakt', async (req, res) => {
     const { nick, discordId, subject, message } = req.body;
 
@@ -35,14 +31,17 @@ app.post('/api/kontakt', async (req, res) => {
 
     try {
         const guild = client.guilds.cache.get(SERVER_ID);
-        if (!guild) throw new Error("Bot nie widzi serwera.");
+        if (!guild) {
+            console.error("Błąd: Bot nie widzi serwera o ID:", SERVER_ID);
+            return res.status(500).json({ error: 'Bot nie widzi serwera.' });
+        }
 
         let member = null;
         if (discordId) {
             try {
                 member = await guild.members.fetch(discordId.trim());
             } catch (err) {
-                console.log(`Nie znaleziono użytkownika o ID: ${discordId} na serwerze.`);
+                console.log(`Nie znaleziono użytkownika o ID: ${discordId}`);
             }
         }
 
@@ -74,7 +73,7 @@ app.post('/api/kontakt', async (req, res) => {
             .addFields(
                 { name: 'Nick', value: nick, inline: true },
                 { name: 'Podane Discord ID', value: discordId || 'Brak', inline: true },
-                { name: 'Użytkownik na serwerze?', value: member ? `<@${member.id}> (Dodałem go tutaj)` : 'Nie znaleziono / Złe ID', inline: false },
+                { name: 'Użytkownik na serwerze?', value: member ? `<@${member.id}>` : 'Nie znaleziono / Złe ID', inline: false },
                 { name: 'Treść zgłoszenia', value: message, inline: false }
             )
             .setTimestamp();
@@ -88,7 +87,6 @@ app.post('/api/kontakt', async (req, res) => {
     }
 });
 
-// Port dynamiczny dla Render (lub lokalnie 3000)
 const PORT = process.env.PORT || 3000;
 
 client.once('ready', () => {
