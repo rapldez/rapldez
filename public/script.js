@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- PŁYNNA ANIMACJA IKONY (bmw.gif) ORAZ TYTUŁU ---
+    // --- PŁYNNA I WOLNIEJSZA ANIMACJA IKONY (bmw.gif) ORAZ TYTUŁU ---
     const titleText = "@rapldez";
     let titleIndex = 0;
     let isDeleting = false;
@@ -15,18 +15,19 @@ document.addEventListener('DOMContentLoaded', () => {
             titleIndex++;
             document.title = titleText.substring(0, titleIndex);
             if (titleIndex === titleText.length) {
-                setTimeout(() => { isDeleting = true; animateTitle(); }, 1800);
+                setTimeout(() => { isDeleting = true; animateTitle(); }, 2500); // dłuższa pauza po wpisaniu całości
                 return;
             }
         } else {
             titleIndex--;
             document.title = titleText.substring(0, titleIndex) || "\u200B";
             if (titleIndex === 0) {
-                setTimeout(() => { isDeleting = false; animateTitle(); }, 600);
+                setTimeout(() => { isDeleting = false; animateTitle(); }, 1000); // dłuższa pauza po wyczyszczeniu
                 return;
             }
         }
-        setTimeout(animateTitle, isDeleting ? 120 : 180);
+        // Zwiększone opóźnienia, żeby tekst pisał się i kasował miękko, bez pośpiechu
+        setTimeout(animateTitle, isDeleting ? 180 : 250);
     }
     animateTitle();
 
