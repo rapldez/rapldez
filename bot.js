@@ -7,10 +7,7 @@ const session = require('express-session');
 const fetch = require('node-fetch');
 const app = express();
 
-app.use(cors({
-    origin: true,
-    credentials: true
-}));
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -33,11 +30,25 @@ const CATEGORY_ID = '1550704110691422318';
 const YOUR_DISCORD_ID = '920029957739139083';
 const LOG_CHANNEL_ID = '1550753070726512730'; 
 
+// --- MONGODB SCHEMAS ---
 const counterSchema = new mongoose.Schema({
     id: { type: String, default: 'views' },
     count: { type: Number, default: 0 }
 });
 const Counter = mongoose.model('Counter', counterSchema);
+
+// Schemat do trzymania archiwów ticketów w bazie
+const ticketArchiveSchema = new mongoose.Schema({
+    channelName: String,
+    messagesCount: Number,
+    participants: [String],
+    createdAt: String,
+    closedAt: String,
+    archivedAt: String,
+    archivedBy: String,
+    htmlContent: String
+});
+const TicketArchive = mongoose.model('TicketArchive', ticketArchiveSchema);
 
 if (MONGO_URI) {
     mongoose.connect(MONGO_URI)
@@ -82,17 +93,13 @@ app.get('/auth/discord/callback', async (req, res) => {
         if (!tokenData.access_token) return res.redirect('/?error=bad_token');
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
-            headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` },
+            headers: { authorization: `${tokenData.token_type}${tokenData.access_token}` },
         });
 
         const userData = await userResponse.json();
 
         if (userData.id === YOUR_DISCORD_ID) {
-            req.session.user = {
-                id: userData.id,
-                username: userData.username,
-                tag: userData.discriminator
-            };
+            req.session.user = { id: userData.id, username: userData.username };
             return res.redirect('/?login=success');
         } else {
             return res.redirect('/?error=unauthorized');
@@ -112,9 +119,7 @@ app.get('/api/check-auth', (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
-    req.session.destroy(() => {
-        res.json({ success: true });
-    });
+    req.session.destroy(() => { res.json({ success: true }); });
 });
 
 // --- API STRONY ---
@@ -123,27 +128,19 @@ app.get('/api/views', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     try {
         if (!MONGO_URI) return res.json({ views: 'Brak Bazy' });
-        
         let counter = await Counter.findOne({ id: 'views' });
-        if (!counter) {
-            counter = new Counter({ id: 'views', count: 0 });
-        }
+        if (!counter) counter = new Counter({ id: 'views', count: 0 });
         counter.count += 1;
         await counter.save();
-        
         res.json({ views: counter.count });
     } catch (err) {
-        console.error("Błąd licznika:", err);
         res.status(500).json({ views: 'Live' });
     }
 });
 
 app.post('/api/kontakt', async (req, res) => {
     const { nick, subject, message } = req.body;
-
-    if (!nick || !message || !subject) {
-        return res.status(400).json({ error: 'Brakujące dane' });
-    }
+    if (!nick || !message || !subject) return res.status(400).json({ error: 'Brakujące dane' });
 
     try {
         const guild = client.guilds.cache.get(SERVER_ID);
@@ -151,67 +148,40 @@ app.post('/api/kontakt', async (req, res) => {
 
         const inputClean = nick.toLowerCase().trim();
         let member = null;
-
         try {
             const searchResults = await guild.members.fetch({ query: inputClean, limit: 10 });
-            member = searchResults.find(m => 
-                m.user.username.toLowerCase() === inputClean || 
-                (m.user.globalName && m.user.globalName.toLowerCase() === inputClean) ||
-                (m.nickname && m.nickname.toLowerCase() === inputClean)
-            );
-
+            member = searchResults.find(m => m.user.username.toLowerCase() === inputClean || (m.user.globalName && m.user.globalName.toLowerCase() === inputClean));
             if (!member) {
                 const allMembers = await guild.members.fetch(); 
-                member = allMembers.find(m => 
-                    m.user.username.toLowerCase() === inputClean || 
-                    (m.user.globalName && m.user.globalName.toLowerCase() === inputClean) ||
-                    (m.nickname && m.nickname.toLowerCase() === inputClean)
-                );
+                member = allMembers.find(m => m.user.username.toLowerCase() === inputClean);
             }
-        } catch (e) {
-            console.log("Błąd szukania użytkownika:", e);
-        }
+        } catch (e) {}
 
-        const permissionOverwrites = [
-            { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }
-        ];
-
+        const permissionOverwrites = [{ id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }];
         if (member) {
-            permissionOverwrites.push({
-                id: member.id,
-                allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory],
-            });
+            permissionOverwrites.push({ id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
         }
 
         const safeNick = nick.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 16) || 'nieznany';
         const channelName = `ticket-${safeNick}`;
-        const topicId = member ? member.id : 'brak_id';
+        
+        // Zapisujemy dokładną godzinę i datę otwarcia w topicu kanału wraz z ID
+        const createdAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+        const topicData = `${member ? member.id : 'brak_id'}\vert{}CREATED:${createdAtStr}`;
         
         const newChannel = await guild.channels.create({
             name: channelName,
             type: ChannelType.GuildText,
             parent: CATEGORY_ID,
-            topic: topicId,
+            topic: topicData,
             permissionOverwrites: permissionOverwrites
         });
 
         const pingText = member ? `<@${member.id}>` : 'Brak na serwerze';
-        const dateStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
-
         const embed = new EmbedBuilder()
             .setColor('#111214')
             .setAuthor({ name: '🎫 RAPLDEZ • ZGŁOSZENIE ZE STRONY' })
-            .setDescription(`
-**• 👤 × Informacje o nadawcy:**
-\`—\` **× Nick ze strony:** \`${nick}\`
-\`—\` **× Ping:** ${pingText}
-
-**• 📩 × Informacje o zgłoszeniu:**
-\`—\` **× Temat:** \`${subject}\`
-\`—\` **× Data wysłania:** \`${dateStr}\`
-\`—\` **× Treść:**
-\`\`\`text\n${message}\n\`\`\`
-            `)
+            .setDescription(`**• 👤 × Nadawca:** \`${nick}\` (${pingText})\n**• 📩 × Temat:** \`${subject}\`\n**• 🕒 × Otwarto:** \`${createdAtStr}\`\n\`\`\`text\n${message}\n\`\`\``)
             .setFooter({ text: 'rapldez OS • System zgłoszeń' });
 
         const row = new ActionRowBuilder().addComponents(
@@ -219,17 +189,10 @@ app.post('/api/kontakt', async (req, res) => {
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj').setStyle(ButtonStyle.Danger).setEmoji('📁')
         );
 
-        await newChannel.send({ 
-            content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie!`, 
-            embeds: [embed],
-            components: [row]
-        });
-        
-        res.status(200).json({ message: 'Zgłoszenie wysłane! Sprawdź Discorda.' });
-
+        await newChannel.send({ content: `<@${YOUR_DISCORD_ID}> Masz nowe zgłoszenie!`, embeds: [embed], components: [row] });
+        res.status(200).json({ message: 'Zgłoszenie wysłane!' });
     } catch (error) {
-        console.error("Błąd przy tworzeniu ticketa:", error);
-        res.status(500).json({ message: 'Wystąpił błąd podczas komunikacji z serwerem.' });
+        res.status(500).json({ message: 'Wystąpił błąd serwera.' });
     }
 });
 
@@ -237,92 +200,41 @@ app.post('/api/reboot', (req, res) => {
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) {
         return res.status(403).json({ error: 'Brak uprawnień' });
     }
-
-    res.json({ message: 'Zlecono restart serwera.' });
-    setTimeout(() => { process.exit(1); }, 1000);
+    res.json({ message: 'Restart...' });
+    setTimeout(() => process.exit(1), 1000);
 });
 
-// --- KOMENDY NA DISCORDZIE (Upiększony Kreator Embedów) ---
+// --- KOMENDY NA DISCORDZIE ---
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
-
     if (message.content.startsWith('!embed') && message.author.id === YOUR_DISCORD_ID) {
         const rawArgs = message.content.replace('!embed', '').trim();
-        
-        // Jeśli komenda jest pusta, wyślij ładnego, mrocznego embeda z instrukcją
         if (!rawArgs) {
             const helpEmbed = new EmbedBuilder()
                 .setColor('#111214')
                 .setAuthor({ name: '🛠️ RAPLDEZ • KREATOR EMBEDÓW' })
-                .setDescription(`
-**• 📌 × Instrukcja użycia:**
-Wpisz komendę, używając pionowej kreski (\`|\`) do oddzielenia elementów.
-
-**• ⚙️ × Dostępne parametry:**
-\`—\` \`title=...\` – Tytuł embeda
-\`—\` \`desc=...\` – Treść / Opis (możesz użyć \`\\n\` do nowej linijki)
-\`—\` \`color=#HEX\` – Kolor paska bocznego (np. \`#23a559\`)
-\`—\` \`author=...\` – Tekst w nagłówku (autor)
-\`—\` \`footer=...\` – Tekst w stopce
-\`—\` \`thumbnail=URL\` – Miniaturka w prawym górnym rogu
-\`—\` \`image=URL\` – Duży obraz na samym dole
-
-**• 💡 × Przykład:**
-\`!embed title=Witaj! | desc=Zasady serwera:\\n1. Kultura\\n2. Szacunek | color=#23a559 | footer=Regulamin\`
-                `)
-                .setFooter({ text: 'rapldez OS • Generator stylów' })
-                .setTimestamp();
-
+                .setDescription('Użyj: `!embed title=Tytuł | desc=Opis | color=#23a559 | footer=Stopka`');
             await message.channel.send({ embeds: [helpEmbed] });
             await message.delete().catch(() => null);
             return;
         }
-
         const parts = rawArgs.split('|');
         const embedData = {};
-        
         parts.forEach(part => {
             const index = part.indexOf('=');
-            if (index !== -1) {
-                const key = part.substring(0, index).trim().toLowerCase();
-                const value = part.substring(index + 1).trim();
-                embedData[key] = value;
-            }
+            if (index !== -1) embedData[part.substring(0, index).trim().toLowerCase()] = part.substring(index + 1).trim();
         });
-
         const embed = new EmbedBuilder();
-        let hasContent = false;
-        
-        if (embedData.title) { embed.setTitle(embedData.title); hasContent = true; }
-        if (embedData.desc) { embed.setDescription(embedData.desc.replace(/\\n/g, '\n')); hasContent = true; }
-        
-        if (embedData.color && /^#[0-9A-F]{6}$/i.test(embedData.color)) {
-            embed.setColor(embedData.color);
-        } else {
-            embed.setColor('#111214'); 
-        }
-
+        if (embedData.title) embed.setTitle(embedData.title);
+        if (embedData.desc) embed.setDescription(embedData.desc.replace(/\\n/g, '\n'));
+        embed.setColor(embedData.color && /^#[0-9A-F]{6}$/i.test(embedData.color) ? embedData.color : '#111214');
         if (embedData.footer) embed.setFooter({ text: embedData.footer });
         if (embedData.author) embed.setAuthor({ name: embedData.author });
-        
-        try {
-            if (embedData.image) embed.setImage(embedData.image);
-            if (embedData.thumbnail) embed.setThumbnail(embedData.thumbnail);
-        } catch (e) {
-            console.log("Problem z załadowaniem grafiki.");
-        }
+        if (embedData.image) embed.setImage(embedData.image);
+        if (embedData.thumbnail) embed.setThumbnail(embedData.thumbnail);
 
-        if (!hasContent) {
-            embed.setDescription("⚠️ Zrobiłeś pusty embed! Musisz podać chociaż `title=` lub `desc=`.");
-        }
-
-        try {
-            await message.channel.send({ embeds: [embed] });
-            await message.delete().catch(() => null);
-        } catch (err) {
-            console.log("Błąd wysyłania embeda:", err);
-            message.channel.send("Wystąpił błąd. Sprawdź, czy linki do obrazków są poprawne.");
-        }
+        await message.channel.send({ embeds: [embed] });
+        await message.delete().catch(() => null);
     }
 });
 
@@ -330,20 +242,35 @@ Wpisz komendę, używając pionowej kreski (\`|\`) do oddzielenia elementów.
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
     if (interaction.user.id !== YOUR_DISCORD_ID && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-        return interaction.reply({ content: 'Tylko administrator może zarządzać zgłoszeniem.', ephemeral: true });
+        return interaction.reply({ content: 'Tylko administrator.', ephemeral: true });
     }
 
-    const targetId = interaction.channel.topic; 
+    const topic = interaction.channel.topic || '';
+    let targetId = 'brak_id';
+    let createdAtStr = 'Nieznana';
+
+    if (topic.includes('CREATED:')) {
+        const parts = topic.split('|');
+        targetId = parts[0];
+        createdAtStr = parts[1].replace('CREATED:', '');
+    } else {
+        targetId = topic;
+    }
 
     if (interaction.customId === 'close_ticket') {
         if (targetId && targetId !== 'brak_id') {
             await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: false }).catch(() => null);
         }
+        const closedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+        
+        // Zapisujemy czas zamknięcia w topicu
+        interaction.channel.setTopic(`${targetId}|CREATED:${createdAtStr}|CLOSED:${closedAtStr}`).catch(() => null);
+
         const reopenRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('open_ticket').setLabel('Otwórz ponownie').setStyle(ButtonStyle.Success).setEmoji('🔓'),
             new ButtonBuilder().setCustomId('archive_ticket').setLabel('Archiwizuj i Usuń').setStyle(ButtonStyle.Danger).setEmoji('📁')
         );
-        await interaction.reply({ content: '🔒 Zgłoszenie zamknięte.', components: [reopenRow] });
+        await interaction.reply({ content: `🔒 Zgłoszenie zamknięte (${closedAtStr}).`, components: [reopenRow] });
     }
 
     if (interaction.customId === 'open_ticket') {
@@ -358,30 +285,70 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.customId === 'archive_ticket') {
-        await interaction.reply('📁 Generuję archiwum HTML...');
+        await interaction.reply('📁 Generuję szczegółowe archiwum...');
         try {
             let messages = await interaction.channel.messages.fetch({ limit: 100 });
             messages = Array.from(messages.values()).reverse();
             
+            // Wyciąganie uczestników
+            const participantsSet = new Set();
+            messages.forEach(m => {
+                if (!m.author.bot) participantsSet.add(m.author.username);
+            });
+            const participantsList = participantsSet.size > 0 ? Array.from(participantsSet).join(', ') : 'Brak interakcji';
+
+            // Czasy
+            let closedAtStr = 'Nie zamknięto ręcznie';
+            if (topic.includes('CLOSED:')) {
+                const match = topic.match(/CLOSED:(.+)/);
+                if (match) closedAtStr = match[1];
+            }
+            const archivedAtStr = new Date().toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' });
+
+            // Generowanie HTML do bazy
             let htmlContent = `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Archiwum</title><style>body{background:#313338;color:#dbdee1;font-family:sans-serif;padding:20px}.message{margin-bottom:15px}.author{font-weight:bold;color:#f2f3f5}.content{background:#2b2d31;padding:10px;border-radius:6px;display:inline-block}</style></head><body><h2>Archiwum: ${interaction.channel.name}</h2>`;
             messages.forEach(m => {
                 htmlContent += `<div class="message"><span class="author">${m.author.username}</span> <span style="font-size:11px;color:#949ba4">${m.createdAt.toLocaleString('pl-PL')}</span><br><div class="content">${m.content || '[Media]'}</div></div>`;
             });
             htmlContent += `</body></html>`;
 
-            const attachment = new AttachmentBuilder(Buffer.from(htmlContent, 'utf-8'), { name: `archiwum-${interaction.channel.name}.html` });
+            // Zapis do bazy danych MongoDB
+            await TicketArchive.create({
+                channelName: interaction.channel.name,
+                messagesCount: messages.length,
+                participants: Array.from(participantsSet),
+                createdAt: createdAtStr,
+                closedAt: closedAtStr,
+                archivedAt: archivedAtStr,
+                archivedBy: interaction.user.username,
+                htmlContent: htmlContent
+            });
+
+            // Upiększony Embed z wymaganymi danymi (bez dołączania pliku na czat, żeby był porządek)
             const embedLog = new EmbedBuilder()
                 .setColor('#111214')
-                .setAuthor({ name: '📁 RAPLDEZ • ARCHIWUM TICKETA' })
-                .setDescription(`**• Kanał:** \`${interaction.channel.name}\`\n**• Wiadomości:** \`${messages.length}\`\n**• Zarchiwizował:** <@${interaction.user.id}>`)
+                .setAuthor({ name: '📁 RAPLDEZ • SZCZEGÓŁOWE ARCHIWUM TICKETA' })
+                .setDescription(`
+**• Nazwa kanału:** \`${interaction.channel.name}\`
+**• Ilość wiadomości:** \`${messages.length}\`
+**• Uczestnicy:** \`${participantsList}\`
+**• Otwarcie:** \`${createdAtStr}\`
+**• Zamknięcie:** \`${closedAtStr}\`
+**• Archiwizacja:** \`${archivedAtStr}\`
+**• Zarchiwizował:** <@${interaction.user.id}>
+                `)
+                .setFooter({ text: 'rapldez OS • Zapisano w bazie MongoDB' })
                 .setTimestamp();
 
             const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-            if (logChannel) await logChannel.send({ embeds: [embedLog], files: [attachment] });
+            if (logChannel) {
+                await logChannel.send({ embeds: [embedLog] });
+            }
         } catch (err) {
-            console.log('Błąd:', err);
+            console.log('Błąd archiwizacji:', err);
         }
-        setTimeout(() => { interaction.channel.delete().catch(() => null); }, 5000);
+
+        setTimeout(() => { interaction.channel.delete().catch(() => null); }, 4000);
     }
 });
 
