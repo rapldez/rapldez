@@ -309,7 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const mainTerminal = document.getElementById('main-terminal');
     const termForm = document.getElementById('terminal-form');
 
-    // --- NOWE: HISTORIA KOMEND I DŹWIĘKI KLAWIATURY ---
+    // --- HISTORIA KOMEND, TAB-COMPLETION I DŹWIĘKI KLAWIATURY ---
     const commandHistory = [];
     let historyIndex = -1;
 
@@ -344,6 +344,25 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter') {
                 playMechanicalSound();
             }
+
+            // Obsługa klawisza Tab (Autouzupełnianie)
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const currentVal = termInput.value.trim().toLowerCase();
+                if (!currentVal) return;
+
+                let availableCommands = ['pomoc', 'setup', 'ping', 'zapros', 'motyw', 'clear'];
+                if (isAdminLogged) {
+                    availableCommands.push('sysinfo', 'db stats', 'paste', 'bot status', 'search', 'reboot', 'giveaway');
+                }
+
+                const match = availableCommands.find(cmd => cmd.startsWith(currentVal));
+                if (match) {
+                    termInput.value = match + ' ';
+                }
+            }
+
+            // Obsługa historii komend (Strzałka Góra / Dół)
             if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 if (historyIndex > 0) {
@@ -362,7 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    // ------------------------------------------------
+    // -----------------------------------------------------------
 
     function openTerminalClean(isManual) {
         termOverlay.style.opacity = '1';
@@ -427,6 +446,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 &nbsp;&nbsp;<b>paste</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- zapisuje tekst do pliku /p/...<br>
                                 &nbsp;&nbsp;<b>bot status</b>- zmienia status aktywności bota<br>
                                 &nbsp;&nbsp;<b>search</b>&nbsp;&nbsp;&nbsp;&nbsp;- szuka słowa w zarchiwizowanych ticketach<br>
+                                &nbsp;&nbsp;<b>giveaway</b>&nbsp;&nbsp;- uruchamia konkurs (giveaway [kanał] [min] [nagroda])<br>
                                 &nbsp;&nbsp;<b>reboot</b>&nbsp;&nbsp;&nbsp;&nbsp;- zdalny restart bota
                             `;
                         }
