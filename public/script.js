@@ -377,7 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             contactStatus.style.color = "#23a559";
-            contactStatus.innerText = "Wysyłanie zgłoszenia...";
+            contactStatus.innerText = "Sprawdzanie obecności na serwerze i wysyłanie...";
             sendContactBtn.disabled = true;
 
             const formData = { nick, subject, message };
@@ -387,9 +387,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
             })
-            .then(res => res.json())
+            .then(async res => {
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.message || 'Wystąpił błąd');
+                }
+                return data;
+            })
             .then(data => {
-                contactStatus.innerText = "Zgłoszenie wysłane pomyślnie!";
+                contactStatus.style.color = "#23a559";
+                contactStatus.innerText = data.message || "Zgłoszenie wysłane pomyślnie!";
                 document.getElementById('contact-nick').value = '';
                 document.getElementById('contact-subject').value = '';
                 document.getElementById('contact-message').value = '';
@@ -402,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch(err => {
                 contactStatus.style.color = "#f23f42";
-                contactStatus.innerText = "Wystąpił błąd serwera.";
+                contactStatus.innerText = err.message;
                 sendContactBtn.disabled = false;
             });
         });
