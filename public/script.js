@@ -531,7 +531,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     animateTitle();
 
-    fetch('/api/views')
+    // Do adresu licznika doczepiony unikalny ciąg znaków (wymusza pobranie z serwera, omija cache)
+    fetch('/api/views?nocache=' + new Date().getTime())
         .then(res => res.json())
         .then(data => {
             const counterEl = document.getElementById('live-counter');
