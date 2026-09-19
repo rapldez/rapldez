@@ -36,7 +36,6 @@
         </div>
     </div>
 
-    <!-- Panel Kontaktowy -->
     <div id="contact-overlay">
         <div class="contact-window">
             <div class="contact-header">
@@ -140,15 +139,19 @@
                     <div class="music-controls">
                         <i class="fa-solid fa-volume-low" id="music-mute-btn" title="Wycisz"></i>
                         <input type="range" id="music-volume" min="0" max="1" step="0.01" value="0.15" title="Głośność">
-                        <i class="fa-solid fa-pause" id="play-pause-btn" style="margin-left: 5px;"></i>
+                        <div class="track-buttons" style="display: flex; gap: 10px; align-items: center; margin-left: 8px;">
+                            <i class="fa-solid fa-backward-step" id="prev-track-btn" title="Poprzednia" style="cursor: pointer;"></i>
+                            <i class="fa-solid fa-pause" id="play-pause-btn" title="Start/Pauza" style="cursor: pointer;"></i>
+                            <i class="fa-solid fa-forward-step" id="next-track-btn" title="Następna" style="cursor: pointer;"></i>
+                        </div>
                     </div>
                 </div>
                 
                 <div class="views">
                     <i class="fa-solid fa-eye"></i> <span id="live-counter">Live</span>
-                    <div class="action-icons" style="display:inline-block; margin-left: 15px;">
-                        <i class="fa-solid fa-terminal" id="open-terminal" title="Terminal" style="font-size: 14px; transition: color 0.2s; margin-right: 8px;"></i>
-                        <i class="fa-solid fa-envelope" id="open-contact" title="Kontakt" style="font-size: 14px; transition: color 0.2s;"></i>
+                    <div class="action-icons" style="display:inline-block; margin-left: 20px;">
+                        <i class="fa-solid fa-terminal" id="open-terminal" title="Terminal" style="font-size: 14px; transition: color 0.2s; margin-right: 14px; cursor: pointer;"></i>
+                        <i class="fa-solid fa-envelope" id="open-contact" title="Kontakt" style="font-size: 14px; transition: color 0.2s; cursor: pointer;"></i>
                     </div>
                 </div>
             </div>
