@@ -283,7 +283,7 @@ app.post('/api/terminal', async (req, res) => {
 
     if (cmdLower === 'search' && cmdArgs.length > 1) {
         const query = cmdArgs.slice(1).join(' ');
-        const results = await TicketArchive.find({ htmlContent: { $regex: query, $options: 'i' } });
+        const results = await TicketArchive.find({ htmlContent: { $regex: query,$options: 'i' } });
         if (results.length === 0) return res.json({ output: `Brak wyników w bazie dla słowa: "${query}"` });
         const names = results.map(r => r.channelName).join(', ');
         return res.json({ output: `Znaleziono słowo "${query}" w ticketach (${results.length}):\n${names}` });
@@ -468,18 +468,47 @@ const SPAM_TIME = 4000;
 const SPAM_DUPLICATES = 4; 
 const TIMEOUT_DURATION = 5 * 60 * 1000; 
 
-// Mapa śledząca aktywne kanały głosowe: channelId -> ownerId
 const tempVoiceChannels = new Map();
 
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
-    // --- SYSTEM ANTY-SPAM ---
     if (message.author.id !== YOUR_DISCORD_ID && !message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
         const userId = message.author.id;
-        const currentTime = Date.now();
         const msgContent = message.content.toLowerCase();
 
+        // --- 1. DETEKTOR SCAM-LINKÓW (PUNKT 20) ---
+        const scamRegex = /(discorcl|dlscord|discord-nitro|discord-app|nitro-gift|steamcommunitly|stearmcommunity|steam-nitro|free-nitro|discord\.xyz|discord-gift|gift-nitro)/i;
+        const isRealDiscord = msgContent.includes('discord.com') || msgContent.includes('discord.gg');
+        
+        if (scamRegex.test(msgContent) && !isRealDiscord) {
+            await message.delete().catch(() => {});
+            if (message.member && message.member.moderatable) {
+                await message.member.timeout(24 * 60 * 60 * 1000, 'Zabezpieczenie: Wysłano Scam-Link (Phishing)'); 
+            }
+            sendServerLog('☠️ Zablokowano Scam-Link', `**Użytkownik:** <@${userId}>\n**Kanał:** <#${message.channel.id}>\n**Akcja:** Wiadomość usunięta, Timeout 24h\n**Wykryta treść:**\n\`\`\`text\n${message.content.replace(/`/g, '')}\n\`\`\``);
+            const alertMsg = await message.channel.send({ content: `⚠️ <@${userId}>, wysyłanie podejrzanych linków jest zabronione. Twoje konto zostało tymczasowo zablokowane.` });
+            setTimeout(() => alertMsg.delete().catch(()=>null), 8000);
+            return;
+        }
+
+        // --- 2. TARCZA MASOWYCH WZMIANEK (PUNKT 22) ---
+        const mentionCount = message.mentions.users.size + message.mentions.roles.size;
+        const hasEveryone = message.content.includes('@everyone') || message.content.includes('@here');
+        
+        if (mentionCount > 4 || (hasEveryone && !message.member.permissions.has(PermissionsBitField.Flags.MentionEveryone))) {
+            await message.delete().catch(() => {});
+            if (message.member && message.member.moderatable) {
+                await message.member.timeout(60 * 60 * 1000, 'Zabezpieczenie: Masowe oznaczanie (Mass Mention)'); 
+            }
+            sendServerLog('🛡️ Tarcza Anty-Rajdowa', `**Użytkownik:** <@${userId}>\n**Kanał:** <#${message.channel.id}>\n**Akcja:** Wiadomość usunięta, Timeout 1h\n**Powód:** Oznaczono ${mentionCount} osób/ról lub użyto @everyone.`);
+            const alertMsg = await message.channel.send({ content: `⚠️ <@${userId}>, prosimy nie oznaczać masowo użytkowników!` });
+            setTimeout(() => alertMsg.delete().catch(()=>null), 5000);
+            return;
+        }
+
+        // --- 3. ORYGINALNY SYSTEM ANTY-SPAM ---
+        const currentTime = Date.now();
         if (!userSpamMap.has(userId)) {
             userSpamMap.set(userId, { timestamps: [], lastMessage: msgContent, duplicateCount: 1 });
         }
@@ -521,16 +550,13 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // --- ZARZĄDZANIE PRYWATNYMI POKOJAMI GŁOSOWYMI (PUNKT 13) ---
     const voiceCommands = ['!lock', '!unlock', '!permit', '!reject', '!limit', '!name'];
     const firstWord = message.content.split(' ')[0].toLowerCase();
 
     if (voiceCommands.includes(firstWord)) {
         let userVoiceChannel = message.member?.voice?.channel;
         
-        // Sprawdzamy czy autor siedzi w swoim prywatnym pokoju
         if (!userVoiceChannel || !tempVoiceChannels.has(userVoiceChannel.id)) {
-            // Szukamy czy w ogóle ma jakiś utworzony kanał
             for (const [chanId, ownerId] of tempVoiceChannels.entries()) {
                 if (ownerId === message.author.id) {
                     userVoiceChannel = message.guild.channels.cache.get(chanId);
@@ -591,7 +617,6 @@ client.on('messageCreate', async message => {
             return message.reply(`✏️ Nazwa Twojego pokoju została zmieniona na: \`🔒 | ${newName}\`.`);
         }
     }
-    // --- KONIEC POKOI GŁOSOWYCH ---
 
     if (message.content.startsWith('!clear') && message.author.id === YOUR_DISCORD_ID) {
         const amount = parseInt(message.content.split(' ')[1]);
@@ -703,7 +728,6 @@ client.on('messageUpdate', (oldMsg, newMsg) => {
     sendServerLog(action, `**Autor:** <@${oldMsg.author?.id}>\n**Kanał:** <#${oldMsg.channel.id}>\n\n**Przed:**\n\`\`\`text\n${oldMsg.content || 'Brak'}\n\`\`\`**Po:**\n\`\`\`text\n${newMsg.content || 'Brak'}\n\`\`\``);
 });
 
-// Dynamiczne pokoje głosowe i logi
 client.on('voiceStateUpdate', async (oldState, newState) => {
     const user = `<@${newState.id}>`;
     
@@ -716,7 +740,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     }
 
     try {
-        // Wejście na kanał tworzenia
         if (newState.channelId === VOICE_CREATOR_CHANNEL_ID) {
             const guild = newState.guild;
             const member = newState.member;
@@ -741,13 +764,11 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
             await member.voice.setChannel(createdChannel).catch(() => {});
             tempVoiceChannels.set(createdChannel.id, member.id);
 
-            // Krótka instrukcja dla właściciela na czacie nowo utworzonego kanału
             createdChannel.send({
                 content: `👋 <@${member.id}> Oto Twój pokój prywatny!\n**Dostępne komendy:**\n• \`!lock\` / \`!unlock\` - blokuj/odblokuj pokój\n• \`!permit @user\` / \`!reject @user\` - zarządzaj gośćmi\n• \`!limit [liczba]\` - ustaw limit osób\n• \`!name [nazwa]\` - zmień nazwę pokoju`
             }).catch(() => {});
         }
 
-        // Opuszczenie kanału i sprzątanie
         if (oldState.channelId && oldState.channelId !== VOICE_CREATOR_CHANNEL_ID) {
             const oldChannel = oldState.channel;
             if (oldChannel && tempVoiceChannels.has(oldChannel.id) && oldChannel.members.size === 0) {
@@ -820,7 +841,6 @@ client.on('roleDelete', r => sendServerLog('🗑️ Usunięcie roli', `Usunięto
 client.on('guildBanAdd', ban => sendServerLog('🔨 Zbanowanie członka', `Zbanowano \`${ban.user.tag}\`.`));
 client.on('guildBanRemove', ban => sendServerLog('🕊️ Odbanowanie członka', `Odbanowano \`${ban.user.tag}\`.`));
 
-// Pętla rozliczania konkursów
 setInterval(async () => {
     try {
         const activeGiveaways = await Giveaway.find({ ended: false, endsAt: { $lte: Date.now() } });
@@ -937,7 +957,9 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId === 'join_giveaway') {
         try {
             const g = await Giveaway.findOne({ messageId: interaction.message.id, ended: false });
-            if (!g) return interaction.reply({ content: '❌ Ten konkurs już się zakończył.', ephemeral: true });
+            if (!g) {
+                return interaction.reply({ content: '❌ Ten konkurs już się zakończył.', ephemeral: true });
+            }
 
             let left = false;
             if (g.participants.includes(interaction.user.id)) {
