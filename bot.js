@@ -162,7 +162,7 @@ app.get('/api/views', async (req, res) => {
     }
 });
 
-// NAPRAWIONY FORMULARZ KONTAKTOWY (TICKET ZE STRONY)
+// NAPRAWIONY ENDPOINT FORMULARZA KONTAKTOWEGO (/api/kontakt)
 app.post('/api/kontakt', async (req, res) => {
     const { nick, subject, message } = req.body;
     if (!nick || !message || !subject) return res.status(400).json({ error: 'Brakujące dane' });
@@ -426,14 +426,13 @@ client.on('roleDelete', r => sendServerLog('🗑️ Usunięcie roli', `Usunięto
 client.on('guildBanAdd', ban => sendServerLog('🔨 Zbanowanie członka', `Zbanowano \`${ban.user.tag}\`.`));
 client.on('guildBanRemove', ban => sendServerLog('🕊️ Odbanowanie członka', `Odbanowano \`${ban.user.tag}\`.`));
 
-// --- SYSTEM JEDNEGO STATUSU (EDYTOCOWANY CO 5 MINUT) ---
+// --- SYSTEM MONITORU INFRASTRUKTURY (JEDNA WIADOMOŚĆ CYKLICZNIE EDYTOWANA) ---
 client.once('ready', async () => {
     app.listen(PORT, () => { console.log(`Serwer działa na porcie ${PORT}!`); });
-    
     try {
         const statusChannel = client.channels.cache.get(STATUS_CHANNEL_ID);
         if (statusChannel) {
-            // Czyszczenie starego śmietnika na kanale statusu, żeby została tylko jedna wiadomość
+            // Czyszczenie kanału statusu ze starych śmieci
             const fetchedMessages = await statusChannel.messages.fetch({ limit: 10 });
             if (fetchedMessages.size > 0) {
                 await statusChannel.bulkDelete(fetchedMessages, true).catch(() => {});
@@ -449,7 +448,7 @@ client.once('ready', async () => {
                     `**• 📶 Aktualny Ping:** \`${client.ws.ping}ms\``
                 )
                 .setTimestamp()
-                .setFooter({ text: 'rapldez.onrender.com • Automatyczny odświeżacz' });
+                .setFooter({ text: 'rapldez.onrender.com • Panel Automatycznego Statusu' });
 
             const statusMsg = await statusChannel.send({ embeds: [getStatusEmbed()] });
 
@@ -461,7 +460,7 @@ client.once('ready', async () => {
             }, 5 * 60 * 1000);
         }
     } catch (e) {
-        console.error('Błąd uruchamiania monitora statusu:', e);
+        console.error('Błąd monitora statusu:', e);
     }
 });
 
