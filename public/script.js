@@ -15,18 +15,17 @@ document.addEventListener('DOMContentLoaded', () => {
             titleIndex++;
             document.title = titleText.substring(0, titleIndex);
             if (titleIndex === titleText.length) {
-                setTimeout(() => { isDeleting = true; animateTitle(); }, 2500); // dłuższa pauza po wpisaniu całości
+                setTimeout(() => { isDeleting = true; animateTitle(); }, 2500);
                 return;
             }
         } else {
             titleIndex--;
             document.title = titleText.substring(0, titleIndex) || "\u200B";
             if (titleIndex === 0) {
-                setTimeout(() => { isDeleting = false; animateTitle(); }, 1500); // dłuższa pauza po wyczyszczeniu
+                setTimeout(() => { isDeleting = false; animateTitle(); }, 1500);
                 return;
             }
         }
-        // Zwiększone opóźnienia, żeby tekst pisał się i kasował miękko, bez pośpiechu
         setTimeout(animateTitle, isDeleting ? 540 : 540);
     }
     animateTitle();
@@ -357,7 +356,15 @@ document.addEventListener('DOMContentLoaded', () => {
                             &nbsp;&nbsp;<b>clear</b>&nbsp;&nbsp;&nbsp;- czyści ekran
                         `;
                         if (isAdminLogged) {
-                            helpText += `<br><br><span style="color:#fbc02d;">Admin:</span><br>&nbsp;&nbsp;<b>reboot</b>&nbsp;- zdalny restart bota`;
+                            helpText += `
+                                <br><br><span style="color:#fbc02d;">Admin:</span><br>
+                                &nbsp;&nbsp;<b>sysinfo</b>&nbsp;&nbsp;&nbsp;- uptime, RAM i ping bota<br>
+                                &nbsp;&nbsp;<b>db stats</b>&nbsp;&nbsp;- statystyki bazy danych<br>
+                                &nbsp;&nbsp;<b>paste</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- zapisuje tekst do pliku /p/...<br>
+                                &nbsp;&nbsp;<b>bot status</b>- zmienia status aktywności bota<br>
+                                &nbsp;&nbsp;<b>search</b>&nbsp;&nbsp;&nbsp;&nbsp;- szuka słowa w zarchiwizowanych ticketach<br>
+                                &nbsp;&nbsp;<b>reboot</b>&nbsp;&nbsp;&nbsp;&nbsp;- zdalny restart bota
+                            `;
                         }
                         response.innerHTML = helpText;
                         break;
