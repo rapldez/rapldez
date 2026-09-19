@@ -198,7 +198,6 @@ app.post('/api/kontakt', async (req, res) => {
         const channelName = `zgłoszenie-${nextNumber}`;
         
         const createdAtStr = formatDatePL(new Date());
-        // Zapisujemy w topicu: ID_UZYTKOWNIKA | DATA_OTWARCIA | DATA_ZAMKNIECIA
         const topicData = `${member ? member.id : 'brak_id'}\vert{}${createdAtStr}|Brak`;
         
         const newChannel = await guild.channels.create({
@@ -266,27 +265,52 @@ app.post('/api/terminal', async (req, res) => {
     return res.json({ output: `Nie rozpoznano polecenia. Dostępne: sysinfo, db stats, paste [kod], bot status [tekst], search [słowo]` });
 });
 
+// --- ZAKTUALIZOWANY ENDPOINT KREATORA ZAAWANSOWANYCH EMBEDÓW ---
 app.post('/api/send-embed', async (req, res) => {
     if (!req.session || !req.session.user || req.session.user.id !== YOUR_DISCORD_ID) return res.status(403).json({ error: 'Brak uprawnień roota.' });
     
-    const { channelId, title, description, footer } = req.body;
-    if (!channelId || !description) return res.status(400).json({ error: 'Wymagane ID kanału oraz opis.' });
+    const { channelId, content, authorName, authorUrl, authorIcon, title, description, color, image, thumbnail, footer, footerIcon, timestamp } = req.body;
+    if (!channelId || (!description && !title && !content)) return res.status(400).json({ error: 'Wymagane ID kanału oraz treść embedu.' });
 
     try {
         const targetChannel = client.channels.cache.get(channelId);
         if (!targetChannel) return res.status(404).json({ error: 'Nie znaleziono kanału o tym ID.' });
 
-        const embed = new EmbedBuilder()
-            .setColor(MAIN_COLOR)
-            .setDescription(description.replace(/\\n/g, '\n'));
-            
-        if (title) embed.setTitle(title);
-        if (footer) embed.setFooter({ text: footer });
+        const embed = new EmbedBuilder();
 
-        await targetChannel.send({ embeds: [embed] });
-        logToTerminalDiscord('📝 Zdalny Kreator Embedów', `Wysłano wiadomość na kanał <#${channelId}>.`);
+        if (color) embed.setColor(color);
+        if (title) embed.setTitle(title);
+        if (description) embed.setDescription(description.replace(/\\n/g, '\n'));
+        
+        if (authorName) {
+            embed.setAuthor({
+                name: authorName,
+                ...(authorUrl && { url: authorUrl }),
+                ...(authorIcon && { iconURL: authorIcon })
+            });
+        }
+
+        if (image) embed.setImage(image);
+        if (thumbnail) embed.setThumbnail(thumbnail);
+
+        if (footer || footerIcon) {
+            embed.setFooter({
+                text: footer || '',
+                ...(footerIcon && { iconURL: footerIcon })
+            });
+        }
+
+        if (timestamp) embed.setTimestamp();
+
+        const payload = {};
+        if (content) payload.content = content.replace(/\\n/g, '\n');
+        if (description || title || authorName) payload.embeds = [embed];
+
+        await targetChannel.send(payload);
+        logToTerminalDiscord('📝 Zaawansowany Kreator Embedów', `Wysłano wiadomość na kanał <#${channelId}>.`);
         res.json({ success: true, message: 'Embed został wysłany!' });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: 'Błąd podczas wysyłania embeda.' });
     }
 });
@@ -528,14 +552,12 @@ client.on('interactionCreate', async interaction => {
     if (interaction.customId === 'open_ticket') {
         await interaction.deferUpdate();
         
-        // Przywrócenie uprawnień dla zapisanego w topicu użytkownika
         if (targetId && targetId !== 'brak_id') {
             await interaction.channel.permissionOverwrites.edit(targetId, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true }).catch(() => null);
         }
         
         const ticketNumber = interaction.channel.name.replace(/[^0-9]/g, '') || '1';
         
-        // Zmiana nazwy z małym opóźnieniem zapobiegającym błędom limitu Discorda
         setTimeout(async () => {
             await interaction.channel.setName(`zgłoszenie-${ticketNumber}`).catch(() => null);
         }, 1000);
